@@ -9,6 +9,7 @@ import * as stereoMath from './stereo.js';
 import { SkeletonEKF } from './ekf.js';
 
 const MODEL_URL = new URLSearchParams(location.search).get('model') || './models/Xbot.glb';
+const RUN = new URLSearchParams(location.search).get('run') || 'IMG_0706'; // Lauf der Splat-Pipeline
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task';
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
@@ -27,8 +28,9 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   status: $('status'), video: $('video'), overlay: $('overlay'),
   kalman: $('kalman'), sigmaA: $('sigmaA'), sigmaZ: $('sigmaZ'),
-  debug: $('debug'), move: $('move'), mirror: $('mirror'),
+  debug: $('debug'), move: $('move'), upper: $('upper'), mirror: $('mirror'),
   fingers: $('fingers'), camera: $('camera'), splat: $('splat'),
+  live: $('live'), liveInfo: $('liveInfo'), liveLinks: $('liveLinks'),
   videoB: $('videoB'), overlayB: $('overlayB'), cameraB: $('cameraB'), camBBox: $('camBBox'),
   fovA: $('fovA'), fovB: $('fovB'), stereoStatus: $('stereoStatus'),
 };
@@ -446,13 +448,17 @@ function track(now) {
     const useFilter = ui.kalman.checked;
     retargeter.apply(useFilter ? filteredPts : rawPts, useFilter ? filteredHands : rawHands);
     const r = useFilter ? root : rootZ;
-    if (ui.move.checked && r && rootOrigin) {
+    // Nur Oberkoerper: Die Position im Raum haengt an der Huefte, also bleibt die Figur stehen.
+    if (ui.upper.checked) {
+      retargeter.model.position.x = retargeter.model.position.z = 0;
+    } else if (ui.move.checked && r && rootOrigin) {
       retargeter.model.position.x = r[0] - rootOrigin[0];
       retargeter.model.position.z = r[2] - rootOrigin[2];
     } else if (!ui.move.checked) {
       retargeter.model.position.x = retargeter.model.position.z = 0;
     }
   }
+  if (ui.live.checked) sendLive(useFilterPts(), useFilterHands());
 
   updateSkeleton(skelRaw, rawPts);
   updateSkeleton(skelFiltered, filteredPts);
@@ -463,6 +469,47 @@ function track(now) {
         : ' · eine Kamera')
     : `Keine Person im Bild · ${fps.toFixed(0)} fps`);
 }
+
+// ---------------------------------------------------------------- Live senden
+// Schickt pro Bild, was der Avatar bekommt, an server.py; Zuschauerseiten (live.html) bauen
+// daraus denselben Avatar nach. Nur Punkte, kein Bild: ein paar Kilobyte pro Bild.
+const useFilterPts = () => (ui.kalman.checked ? filteredPts : rawPts);
+const useFilterHands = () => (ui.kalman.checked ? filteredHands : rawHands);
+const round = (p) => (p ? [+p.x.toFixed(4), +p.y.toFixed(4), +p.z.toFixed(4)] : null);
+let liveBusy = false;
+function sendLive(pts, hands) {
+  if (liveBusy || !retargeter) return; // Server noch mit dem letzten Bild beschaeftigt: auslassen
+  liveBusy = true;
+  const pos = retargeter.model.position;
+  const frame = {
+    t: Math.round(performance.now()),
+    run: RUN,
+    upper: ui.upper.checked,
+    mirror: ui.mirror.checked,
+    pos: [+pos.x.toFixed(4), +pos.z.toFixed(4)],
+    pts: pts.map(round),
+    hands: { Left: hands.Left?.map(round) ?? null, Right: hands.Right?.map(round) ?? null },
+  };
+  fetch('/api/live', { method: 'POST', body: JSON.stringify(frame) })
+    .then((r) => r.json())
+    .then((r) => { ui.liveInfo.textContent = `${r.viewers} Zuschauer`; })
+    .catch(() => { ui.liveInfo.textContent = 'Server nicht erreichbar'; })
+    .finally(() => { liveBusy = false; });
+}
+ui.live.addEventListener('change', async () => {
+  ui.liveInfo.textContent = '';
+  ui.liveLinks.textContent = '';
+  if (!ui.live.checked) return;
+  try {
+    const info = await fetch('/api/info').then((r) => r.json());
+    ui.liveLinks.replaceChildren(...(info.urls.length
+      ? info.urls.map((url) => Object.assign(document.createElement('a'), { href: url, textContent: url, target: '_blank' }))
+      : [Object.assign(document.createElement('a'), { href: './live.html', textContent: 'Zuschauen (nur dieser Rechner)', target: '_blank' }),
+        document.createTextNode(' · für andere Geräte im WLAN den Server mit --lan starten')]));
+  } catch {
+    ui.liveInfo.textContent = 'Server nicht erreichbar';
+  }
+});
 
 // ---------------------------------------------------------------- Vorschau
 const drawer = new DrawingUtils(ui.overlay.getContext('2d'));
@@ -624,6 +671,9 @@ $('btnCalibClear').addEventListener('click', () => {
   try { localStorage.removeItem(CALIB_KEY); } catch { /* nur Komfort */ }
   showStereo();
 });
+ui.upper.checked = new URLSearchParams(location.search).has('upper');
+const setUpper = () => { if (retargeter) retargeter.upperBodyOnly = ui.upper.checked; };
+ui.upper.addEventListener('change', setUpper);
 $('btnCenter').addEventListener('click', () => { rootOrigin = null; });
 ui.mirror.addEventListener('change', () => document.body.classList.toggle('mirror', ui.mirror.checked));
 ui.debug.addEventListener('change', () => { skelRaw.visible = skelFiltered.visible = ui.debug.checked; });
@@ -812,6 +862,7 @@ async function loadAvatar() {
   });
   scene.add(model);
   retargeter = new Retargeter(model);
+  setUpper();
 }
 
 async function loadPose() {
@@ -861,11 +912,32 @@ try {
   const params = new URLSearchParams(location.search);
   // Gaussian Splat der Person als Avatar (Machbarkeitstest), ?run=<Lauf der Pipeline>.
   try {
-    const splat = await loadSplatAvatar(scene, renderer, retargeter, params.get('run') || 'IMG_0706');
+    const splat = await loadSplatAvatar(scene, renderer, retargeter, RUN);
     ui.splat.disabled = false;
     ui.splat.checked = true;
-    ui.splat.addEventListener('change', () => splat.setVisible(ui.splat.checked));
-    splat.setVisible(true);
+    // Roboter halbdurchsichtig unter dem Splat zeigt, wo die Zuteilung der Kleckse noch hakt.
+    const ghost = $('ghost'), splatOp = $('splatOp'), wire = $('ghostWire'), parts = $('parts');
+    if (params.has('ghost')) ghost.value = params.get('ghost');
+    parts.checked = params.has('parts');
+    const updateView = () => {
+      $('ghostVal').textContent = ghost.value;
+      $('splatOpVal').textContent = splatOp.value;
+      $('splatView').hidden = !ui.splat.checked;
+      splat.setView({
+        splat: ui.splat.checked,
+        robotOpacity: ghost.value / 100,
+        splatOpacity: splatOp.value / 100,
+        wireframe: wire.checked,
+      });
+    };
+    for (const el of [ui.splat, wire]) el.addEventListener('change', updateView);
+    for (const el of [ghost, splatOp]) el.addEventListener('input', updateView);
+    parts.addEventListener('change', () => {
+      const url = new URL(location.href);
+      if (parts.checked) url.searchParams.set('parts', ''); else url.searchParams.delete('parts');
+      location.href = url;
+    });
+    updateView();
   } catch (err) {
     console.warn('Splat-Avatar nicht geladen:', err);
   }

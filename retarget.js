@@ -16,6 +16,10 @@ export const LM = {
 const FINGERS = [['Thumb', 1], ['Index', 5], ['Middle', 9], ['Ring', 13], ['Pinky', 17]];
 const HAND = { wrist: 0, index: 5, pinky: 17 };
 
+// Knochen, die im Modus "nur Oberkoerper" in einer festen Haltung bleiben.
+const LOWER_BODY = ['Hips', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
+  'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase'];
+
 const HEAD_PITCH_OFFSET = 0.26; // Nase liegt tiefer als die Ohren (~15 Grad)
 
 const _v1 = new THREE.Vector3();
@@ -87,6 +91,11 @@ export class Retargeter {
       this.hands[side] = { hand, restBasisInv: q.invert() };
     }
 
+    // Nur Oberkoerper: Huefte und Beine werden nicht getrackt, sondern bleiben in
+    // lowerPose (Standard: Ruhepose; holdLowerBody() uebernimmt die aktuelle Haltung).
+    this.upperBodyOnly = false;
+    this.lowerPose = null;
+
     this.footBones = [b.LeftToeBase || b.LeftFoot, b.RightToeBase || b.RightFoot];
     this.restFootY = this.#lowestFoot();
   }
@@ -121,12 +130,30 @@ export class Retargeter {
     bone.quaternion.premultiply(_pq).premultiply(_q).premultiply(_pq.invert());
   }
 
+  #aimLegs(P, lHip, rHip) {
+    const b = this.bones;
+    this.#aim(b.LeftUpLeg, b.LeftLeg, lHip, P[LM.lKn]);
+    this.#aim(b.LeftLeg, b.LeftFoot, P[LM.lKn], P[LM.lAn]);
+    this.#aim(b.LeftFoot, b.LeftToeBase, P[LM.lAn], P[LM.lToe]);
+    this.#aim(b.RightUpLeg, b.RightLeg, rHip, P[LM.rKn]);
+    this.#aim(b.RightLeg, b.RightFoot, P[LM.rKn], P[LM.rAn]);
+    this.#aim(b.RightFoot, b.RightToeBase, P[LM.rAn], P[LM.rToe]);
+  }
+
+  // Merkt sich die aktuelle Haltung von Huefte und Beinen fuer den Modus "nur Oberkoerper".
+  holdLowerBody() {
+    this.lowerPose = LOWER_BODY.filter((n) => this.bones[n]).map((n) => [this.bones[n], this.bones[n].quaternion.clone()]);
+  }
+
   // P: 33 Koerperpunkte. hands: { Left, Right } mit je 21 Handpunkten oder null.
   apply(P, hands = {}) {
     const b = this.bones;
     for (const [bone, rest] of this.rest) bone.quaternion.copy(rest.local);
+    const upper = this.upperBodyOnly;
+    if (upper && this.lowerPose) for (const [bone, q] of this.lowerPose) bone.quaternion.copy(q);
 
-    const lSh = P[LM.lSh], rSh = P[LM.rSh], lHip = P[LM.lHip], rHip = P[LM.rHip];
+    const lSh = P[LM.lSh], rSh = P[LM.rSh];
+    const lHip = upper ? null : P[LM.lHip], rHip = upper ? null : P[LM.rHip];
     const basis = new THREE.Quaternion();
     const left = new THREE.Vector3();
     const up = new THREE.Vector3();
@@ -157,14 +184,10 @@ export class Retargeter {
     this.#aim(b.RightArm, b.RightForeArm, rSh, P[LM.rEl]);
     this.#aim(b.RightForeArm, b.RightHand, P[LM.rEl], P[LM.rWr]);
 
-    this.#aim(b.LeftUpLeg, b.LeftLeg, lHip, P[LM.lKn]);
-    this.#aim(b.LeftLeg, b.LeftFoot, P[LM.lKn], P[LM.lAn]);
-    this.#aim(b.LeftFoot, b.LeftToeBase, P[LM.lAn], P[LM.lToe]);
-    this.#aim(b.RightUpLeg, b.RightLeg, rHip, P[LM.rKn]);
-    this.#aim(b.RightLeg, b.RightFoot, P[LM.rKn], P[LM.rAn]);
-    this.#aim(b.RightFoot, b.RightToeBase, P[LM.rAn], P[LM.rToe]);
+    if (!upper) this.#aimLegs(P, lHip, rHip);
 
     for (const side of ['Left', 'Right']) {
+
       const H = hands[side];
       const rig = this.hands[side];
       if (!H || !rig) continue;

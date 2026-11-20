@@ -50,6 +50,18 @@ cd splat
 uv run splat_pipeline.py video.mov --bg-start 1 --bg-seconds 4 --start 8 --end 30
 ```
 
+## Live zuschauen
+
+Die Tracking-Seite kann den Avatar live an andere Seiten senden: nur die Gelenkpunkte, kein Video.
+
+```sh
+.venv/bin/python server.py 8931 --lan   # ohne --lan nur auf diesem Rechner
+```
+
+Auf der Tracking-Seite «Avatar an Zuschauer senden» einschalten; dort steht auch die Adresse für andere
+Geräte im WLAN (`http://<IP>:8931/live.html`). Geräte im Netz sehen nur die Zuschauerseite und den Splat,
+senden, aufnehmen und kalibrieren geht nur am Rechner selbst.
+
 ## Was nicht ins Repo kommt
 
 Siehe `.gitignore`: Bilder und Videos, Aufnahmen (`splat/captures/`), Ergebnisse (`splat/runs/`),

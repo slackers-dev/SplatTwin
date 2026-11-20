@@ -43,7 +43,13 @@ export async function loadSplatAvatar(scene, renderer, retargeter, run) {
   // liefert, erscheint er unveraendert.
   const P = new Array(33).fill(null);
   for (const [key, index] of Object.entries(LM)) if (S[key]) P[index] = S[key];
+  const upperOnly = retargeter.upperBodyOnly;
+  retargeter.upperBodyOnly = false; // Bindehaltung immer mit der ganzen Aufnahme
   retargeter.apply(P);
+  retargeter.upperBodyOnly = upperOnly;
+  // Im Modus "nur Oberkoerper" bleiben Huefte und Beine in dieser Haltung: Der Splat
+  // wird dort dann gar nicht verformt.
+  retargeter.holdLowerBody();
   retargeter.model.updateMatrixWorld(true);
   const X = (name) => b[name].getWorldPosition(new THREE.Vector3());
 
@@ -203,11 +209,41 @@ export async function loadSplatAvatar(scene, renderer, retargeter, run) {
   scene.add(new SparkRenderer({ renderer }));
   scene.add(mesh);
 
+  // Ansicht: Splat oder Roboter, oder beide uebereinander, um die Zuordnung zu pruefen.
+  // Der durchsichtige Roboter wird nach dem Splat gezeichnet (renderOrder) und schreibt
+  // keine Tiefe, liegt also als Schleier ueber dem Splat: Wo Roboter ohne Splat zu sehen
+  // ist oder Splat weit ueber den Roboter hinausragt, stimmt die Zuteilung nicht.
+  const robotMaterials = [...new Set(robot.flatMap((m) => [].concat(m.material)))];
+  const castShadow = new Map(robot.map((m) => [m, m.castShadow]));
+  const view = { splat: true, robotOpacity: 0, splatOpacity: 1, wireframe: false };
+  function applyView() {
+    const ghost = view.splat && view.robotOpacity > 0;
+    mesh.visible = view.splat;
+    mesh.opacity = view.splatOpacity;
+    for (const m of robot) {
+      m.visible = !view.splat || ghost;
+      m.renderOrder = ghost ? 1 : 0;
+      m.castShadow = ghost ? false : castShadow.get(m);
+    }
+    for (const mat of robotMaterials) {
+      mat.transparent = ghost;
+      mat.opacity = ghost ? view.robotOpacity : 1;
+      mat.depthWrite = !ghost;
+      mat.wireframe = ghost && view.wireframe;
+      mat.needsUpdate = true;
+    }
+  }
+  applyView();
+
   return {
     count: all.length,
+    // Teilweise Aenderung, z. B. setView({ robotOpacity: 0.4 }).
+    setView(change) {
+      Object.assign(view, change);
+      applyView();
+    },
     setVisible(on) {
-      mesh.visible = on;
-      for (const m of robot) m.visible = !on;
+      this.setView({ splat: on });
     },
   };
 }

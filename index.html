@@ -17,6 +17,9 @@
   #panel input[type=range] { width: 100%; accent-color: var(--accent); }
   #panel select { width: 100%; margin-top: 8px; padding: 6px; background: #2a2f38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
   #panel input[type=checkbox] { accent-color: var(--accent); }
+  #panel .dim { color: var(--dim); }
+  #panel .links { margin: 4px 0 0; font-size: 12px; color: var(--dim); overflow-wrap: anywhere; }
+  #panel .links a { display: block; color: var(--text); }
   .row { display: flex; gap: 8px; margin-top: 10px; }
   button, .filebtn { flex: 1; padding: 7px 8px; background: #2a2f38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; text-align: center; }
   button:hover, .filebtn:hover { border-color: var(--accent); }
@@ -83,10 +86,23 @@
 
   <label class="check" style="margin-top:10px"><input id="debug" type="checkbox" checked> Skelett anzeigen</label>
   <label class="check"><input id="fingers" type="checkbox" checked> Finger tracken</label>
+  <label class="check"><input id="upper" type="checkbox"> Nur Oberkörper (Hüfte und Beine stehen still)</label>
   <label class="check"><input id="move" type="checkbox" checked> Bewegung im Raum</label>
   <label class="check"><input id="mirror" type="checkbox"> Spiegeln</label>
   <label class="check"><input id="splat" type="checkbox" disabled> Splat statt Roboter</label>
+  <div id="splatView" hidden>
+    <label>Roboter darunter: <span id="ghostVal"></span> %</label>
+    <input id="ghost" type="range" min="0" max="100" step="5" value="35">
+    <label>Splat-Deckkraft: <span id="splatOpVal"></span> %</label>
+    <input id="splatOp" type="range" min="0" max="100" step="5" value="100">
+    <label class="check"><input id="ghostWire" type="checkbox"> Roboter als Drahtgitter</label>
+    <label class="check"><input id="parts" type="checkbox"> Körperteile einfärben (lädt neu)</label>
+  </div>
   <div class="row"><button id="btnCenter">Position zurücksetzen</button></div>
+
+  <h2>Live senden</h2>
+  <label class="check"><input id="live" type="checkbox"> Avatar an Zuschauer senden <span id="liveInfo" class="dim"></span></label>
+  <p id="liveLinks" class="links"></p>
 
   <h2>Zweite Kamera (Stereo)</h2>
   <select id="cameraB" hidden></select>

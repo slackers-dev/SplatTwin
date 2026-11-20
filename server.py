@@ -5,14 +5,23 @@ Liefert die Seite aus und kalibriert Kameras mit OpenCV (3DRecon 1):
 Die Seite schickt Einzelbilder eines Schachbretts, der Server sucht die Ecken
 und berechnet daraus Kameramatrix und Linsenverzeichnung.
 
-Start:  .venv/bin/python server.py [port]
+Leitet ausserdem das Live-Tracking weiter: Die Tracking-Seite (index.html) schickt pro Bild
+die Gelenkpunkte an /api/live, Zuschauerseiten (live.html) empfangen sie als Server-Sent Events.
+
+Start:  .venv/bin/python server.py [port] [--lan]
+
+Mit --lan ist der Server im lokalen Netz erreichbar, damit andere Geraete im WLAN zuschauen
+koennen. Geraete im Netz bekommen dann nur die Zuschauerseite und was sie braucht; senden,
+aufnehmen und kalibrieren geht weiterhin nur von diesem Rechner aus.
 """
 
 import json
 import re
+import socket
 import subprocess
 import sys
 import threading
+import time
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +37,14 @@ MIN_SHIFT = 0.02        # neue Ansicht muss sich um 2 % der Bildbreite untersche
 MAX_BODY = 20 * 1024 * 1024
 
 CAPTURES = ROOT / "splat" / "captures"   # Aufnahmen der Seite capture.html
+
+LIVE_PING = 15          # Sekunden: so oft bekommt ein Zuschauer ohne neue Daten ein Lebenszeichen
+LIVE_STALE = 2          # Sekunden: so lange ohne Bild gilt der Tracker als weg
+
+# Was Geraete im Netz (nicht dieser Rechner) abrufen duerfen.
+REMOTE_ALLOWED = re.compile(
+    r"/(live\.html|live\.js|retarget\.js|splat-avatar\.js|favicon\.ico|models/[\w.-]+\.glb"
+    r"|splat/runs/[\w-]+/(splat\.ply|splat\.json|rig\.json)|api/live|api/info)?")
 
 sessions = {}           # Kamera -> {"size": (w, h), "views": [Ecken, ...]}
 lock = threading.Lock()
@@ -134,7 +151,102 @@ def save_capture(query, stream, length):
     return info
 
 
+class Live:
+    """Letztes Bild des Trackers; Zuschauer warten auf das naechste (aeltere werden verworfen,
+    ein langsamer Zuschauer bekommt also nur weniger Bilder statt einer wachsenden Verzoegerung)."""
+
+    def __init__(self):
+        self.cond = threading.Condition()
+        self.seq = 0
+        self.frame = b""
+        self.time = 0.0
+        self.viewers = 0
+
+    def publish(self, frame):
+        with self.cond:
+            self.seq += 1
+            self.frame = frame
+            self.time = time.monotonic()
+            self.cond.notify_all()
+            return self.viewers
+
+    def stream(self, write):
+        with self.cond:
+            self.viewers += 1
+            seen = self.seq if time.monotonic() - self.time > LIVE_STALE else self.seq - 1
+        try:
+            while True:
+                with self.cond:
+                    self.cond.wait_for(lambda: self.seq != seen, timeout=LIVE_PING)
+                    seq, frame = self.seq, self.frame
+                if seq == seen:
+                    write(b": ping\n\n")
+                    continue
+                seen = seq
+                write(b"data: " + frame + b"\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            with self.cond:
+                self.viewers -= 1
+
+
+live = Live()
+
+
+def lan_addresses():
+    """IP-Adressen dieses Rechners im lokalen Netz (ohne Verbindung nach aussen zu oeffnen)."""
+    found = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))  # UDP: es wird nichts gesendet
+            found.add(s.getsockname()[0])
+    except OSError:
+        pass
+    return sorted(a for a in found if not a.startswith("127."))
+
+
 class Handler(SimpleHTTPRequestHandler):
+    lan = False
+
+    def is_local(self):
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if not self.is_local() and not REMOTE_ALLOWED.fullmatch(url.path):
+            self.send_json(403, {"error": "nur auf diesem Rechner"})
+            return
+        if url.path == "/":
+            if not self.is_local():  # Geraete im Netz landen direkt beim Zuschauen
+                self.send_response(302)
+                self.send_header("Location", "/live.html")
+                self.end_headers()
+                return
+        if url.path == "/api/info":
+            port = self.server.server_address[1]
+            urls = [f"http://{a}:{port}/live.html" for a in lan_addresses()] if self.lan else []
+            self.send_json(200, {"lan": self.lan, "urls": urls, "viewers": live.viewers})
+            return
+        if url.path == "/api/live":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+
+            def write(data):
+                self.wfile.write(data)
+                self.wfile.flush()
+            live.stream(write)
+            return
+        super().do_GET()
+
+    def do_HEAD(self):
+        if not self.is_local() and not REMOTE_ALLOWED.fullmatch(urlparse(self.path).path):
+            self.send_json(403, {"error": "nur auf diesem Rechner"})
+            return
+        super().do_HEAD()
+
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
@@ -155,7 +267,17 @@ class Handler(SimpleHTTPRequestHandler):
         url = urlparse(self.path)
         query = parse_qs(url.query)
         cam = query.get("cam", ["A"])[0]
+        if not self.is_local():
+            self.send_json(403, {"error": "nur auf diesem Rechner"})
+            return
         try:
+            if url.path == "/api/live":
+                length = int(self.headers.get("Content-Length", 0))
+                if length > 64 * 1024:
+                    raise ValueError("Bild des Trackers zu gross")
+                frame = self.rfile.read(length).replace(b"\n", b"")
+                self.send_json(200, {"viewers": live.publish(frame)})
+                return
             if url.path == "/api/capture":
                 length = int(self.headers.get("Content-Length", 0))
                 self.send_json(200, save_capture(query, self.rfile, length))
@@ -177,9 +299,15 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8931
-    server = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(ROOT)))
-    print(f"Live-Avatar laeuft auf http://127.0.0.1:{port}")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    port = int(args[0]) if args else 8931
+    Handler.lan = "--lan" in sys.argv
+    ThreadingHTTPServer.daemon_threads = True  # offene Zuschauer halten das Beenden nicht auf
+    server = ThreadingHTTPServer(("0.0.0.0" if Handler.lan else "127.0.0.1", port),
+                                 partial(Handler, directory=str(ROOT)))
+    print(f"Live-Avatar laeuft auf http://127.0.0.1:{port}", flush=True)
+    for a in lan_addresses() if Handler.lan else []:
+        print(f"Zuschauen im WLAN:  http://{a}:{port}/live.html", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
