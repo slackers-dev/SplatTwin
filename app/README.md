@@ -45,7 +45,7 @@ eigenen Präfix eintragen. Nach dem Hinzufügen oder Löschen von Quelldateien `
    Weissabgleich pendeln sich ein und werden festgehalten. Im Bild prüfen, ob Helligkeit und Farben stimmen.
    Bei «Ansage» wählen, ob Mac, Handy oder beide sprechen, und mit «Testen» ausprobieren.
    Dann Name und Körpergrösse eintragen, «Aufnahme starten», den Ansagen folgen. **Körper:** aus dem Bild
-   gehen, hineinkommen und zur Kamera A schauen, eine langsame Drehung, danach 20 Sekunden frei bewegen.
+   gehen, hineinkommen und zur Kamera A schauen, eine zügige, gleichmässige Drehung (etwa 20 s, Arme ruhig), danach 20 Sekunden frei bewegen.
    **Gesicht** (eigene Aufnahme, Umschalter oben): nah an die Kamera setzen, Kopf geführt zur einen Seite,
    zur anderen und zurück. Beim Start stellt die App die Handys selbst auf Hauptkamera, 4K und hochkant
    und sperrt Belichtung und Farben. Danach holt der Mac die Dateien und zeigt «Splat rechnen».

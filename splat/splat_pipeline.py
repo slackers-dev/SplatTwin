@@ -257,6 +257,15 @@ def read_cameras(model_dir):
     return cams
 
 
+def read_focal(model_dir):
+    """Brennweite der ersten Kamera (Pixel) aus cameras.txt, das read_cameras angelegt hat."""
+    txt = model_dir.parent / (model_dir.name + "_txt") / "cameras.txt"
+    for line in txt.read_text().split("\n"):
+        if line and not line.startswith("#"):
+            return float(line.split()[4])
+    return 0
+
+
 def orbit_report(cams, n_frames):
     """Bilden die Kameras einen Kreis? Das ist der Test, ob die Idee traegt."""
     print(f"\nRegistriert: {len(cams)} von {n_frames} Frames")
@@ -274,24 +283,37 @@ def orbit_report(cams, n_frames):
     print("Gut ist: fast alle Frames registriert, etwa 360 Grad, kleine Schwankungen.")
 
 
-def run_colmap(run_dir, n_frames):
+def run_colmap(run_dir, n_frames, focal=None):
+    """focal: Brennweite als Vielfaches der Bildbreite (aus der App). Ohne Angabe schaetzt
+    COLMAP sie selbst; das ist bei einer Person, die sich vor fester Kamera dreht, schlecht
+    bestimmt (Schaetzungen lagen bis 20-fach daneben)."""
     db, sparse = run_dir / "colmap.db", run_dir / "sparse_all"
     db.unlink(missing_ok=True)
     shutil.rmtree(sparse, ignore_errors=True)
     sparse.mkdir()
     # Ein Durchgang pro Video: so bekommt jede Kamera ihre eigene Brennweite.
     names = sorted(f.name for f in (run_dir / "frames").iterdir())
-    for cam in sorted({n[0] for n in names}):
+    cams_letters = sorted({n[0] for n in names})
+    # Die Brennweite der App gilt nur fuer die erste Kamera bzw. den ersten Abschnitt (a).
+    # Fest halten nur, wenn es keine weitere Kamera gibt, deren Brennweite geschaetzt werden muss.
+    fixed = focal is not None and cams_letters == ["a"]
+    for cam in cams_letters:
         listing = run_dir / f"frames_{cam}.txt"
         listing.write_text("\n".join(n for n in names if n[0] == cam) + "\n")
+        params = []
+        if focal is not None and cam == "a":
+            h, w = cv2.imread(str(run_dir / "frames" / next(n for n in names if n[0] == cam))).shape[:2]
+            params = ["--ImageReader.camera_params", f"{focal * w:.2f},{w / 2:.2f},{h / 2:.2f}"]
+            print(f"Brennweite aus der App: {focal * w:.0f} px bei {w}x{h}" + (" (fest)" if fixed else " (Startwert)"))
         run(["colmap", "feature_extractor", "--database_path", db, "--image_path", run_dir / "frames",
              "--image_list_path", listing,
              "--ImageReader.mask_path", run_dir / "masks", "--ImageReader.camera_model", "SIMPLE_PINHOLE",
-             "--ImageReader.single_camera", 1, "--FeatureExtraction.use_gpu", 0])
+             "--ImageReader.single_camera", 1, "--FeatureExtraction.use_gpu", 0, *params])
     # Erschoepfend statt nur Nachbarn: so wird auch der Kreis geschlossen
     # (letzter Frame sieht wieder dasselbe wie der erste).
     run(["colmap", "exhaustive_matcher", "--database_path", db, "--FeatureMatching.use_gpu", 0])
-    run(["colmap", "mapper", "--database_path", db, "--image_path", run_dir / "frames", "--output_path", sparse])
+    run(["colmap", "mapper", "--database_path", db, "--image_path", run_dir / "frames", "--output_path", sparse,
+         "--Mapper.ba_refine_focal_length", 0 if fixed else 1])
     models = [(read_cameras(m), m) for m in sorted(sparse.iterdir()) if (m / "images.bin").exists()]
     if not models:
         sys.exit("COLMAP hat kein Modell gefunden: zu wenig Merkmale auf der Person.")
@@ -301,6 +323,7 @@ def run_colmap(run_dir, n_frames):
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(best, out)
     orbit_report(cams, n_frames)
+    print(f"Brennweite im Modell: {read_focal(best):.0f} px")
     return cams
 
 
@@ -381,6 +404,8 @@ def main():
     ap.add_argument("--bg-thresh", type=int, default=28, help="Schwelle fuer den Unterschied zum Hintergrundbild (0-255)")
     ap.add_argument("--steps", type=int, default=7000, help="Trainingsschritte in Brush")
     ap.add_argument("--height", type=float, default=1.75, help="Koerpergroesse in Metern, fuer den Massstab")
+    ap.add_argument("--focal", type=float, help="Brennweite als Vielfaches der Bildbreite (aus der App); "
+                    "Standard: COLMAP schaetzt sie")
     ap.add_argument("--stop-after", choices=["masks", "colmap"], help="frueher aufhoeren")
     args = ap.parse_args()
 
@@ -407,7 +432,7 @@ def main():
     n_frames = sum(len(f) for _, f, _ in sets)
     if args.stop_after == "masks":
         return
-    cams = run_colmap(run_dir, n_frames)
+    cams = run_colmap(run_dir, n_frames, args.focal)
     if args.stop_after == "colmap":
         return
     if len(cams) < n_frames * 0.5:

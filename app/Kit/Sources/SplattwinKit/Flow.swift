@@ -39,7 +39,9 @@ public struct FlowOptions: Codable, Equatable, Sendable {
     public var motion = true
     public var motionSeconds = 20.0
     public var bgSeconds = 4.0
-    public var turnSeconds = 30.0
+    /// Richtzeit fuer eine Koerperdrehung. Kurz ist wichtig: je laenger die Drehung, desto mehr
+    /// schwankt der Koerper und wandern die Arme, und der Splat wird verschmiert (scan-1222: 77 s).
+    public var turnSeconds = 20.0
     /// Dauer des Gesichtsscans, falls das Gesichtsmodell den Kopf nicht sieht. Sonst fuehrt die gemessene
     /// Kopfdrehung durch den Scan: zur einen Seite, zur anderen, zurueck zur Mitte.
     public var faceSeconds = 20.0
@@ -60,7 +62,7 @@ public struct FlowOptions: Codable, Equatable, Sendable {
         motion = try c.decodeIfPresent(Bool.self, forKey: .motion) ?? false
         motionSeconds = try c.decodeIfPresent(Double.self, forKey: .motionSeconds) ?? 20
         bgSeconds = try c.decodeIfPresent(Double.self, forKey: .bgSeconds) ?? 4
-        turnSeconds = try c.decodeIfPresent(Double.self, forKey: .turnSeconds) ?? 30
+        turnSeconds = try c.decodeIfPresent(Double.self, forKey: .turnSeconds) ?? 20
         faceSeconds = try c.decodeIfPresent(Double.self, forKey: .faceSeconds) ?? 20
         hold = try c.decodeIfPresent(Double.self, forKey: .hold) ?? 1.5
         gateTimeout = try c.decodeIfPresent(Double.self, forKey: .gateTimeout) ?? 40
@@ -223,7 +225,7 @@ public final class FlowEngine {
             armReference = main?.arms
             armsOffSince = nil
             good = true
-            say(next == .turnBody ? "Jetzt langsam drehen."
+            say(next == .turnBody ? "Jetzt zügig und gleichmässig drehen, Arme ruhig."
                 : faceByAngle ? "Jetzt den Kopf langsam zur Seite drehen, bis ich gut sage."
                 : "Jetzt eine Runde drehen, in \(Int(options.faceSeconds)) Sekunden. Kopf und Schultern zusammen.", now)
         case .done:
@@ -289,16 +291,19 @@ public final class FlowEngine {
         let fraction = byTime ? elapsed / options.faceSeconds : abs(turned) / 360
         progress = min(1, fraction)
         title = byTime ? "\(label): eine Runde drehen – noch \(max(0, Int((options.faceSeconds - elapsed).rounded(.up)))) s"
-            : "\(label): langsam drehen – \(Int(abs(turned).rounded()))°"
+            : "\(label): gleichmässig drehen – \(Int(abs(turned).rounded()))°"
         while let call = calls.first, fraction >= call.0 {
             say(call.1, now)
             calls.removeFirst()
         }
         var finished = byTime ? fraction >= 1 : fraction >= 0.985
         if !byTime {
-            if speed > 360 / options.turnSeconds * 1.8, elapsed > 2 { say("Langsamer", now, gap: 5) }
-            // Langsam drehen ist erlaubt (und gut fuer die Schaerfe): abgebrochen wird nur, wenn es 15 Sekunden
-            // lang nicht mehr vorwaerts geht, oder nach dem Vierfachen der Richtzeit.
+            let target = 360 / options.turnSeconds
+            if speed > target * 1.8, elapsed > 2 { say("Langsamer", now, gap: 5) }
+            // Zu langsam schadet mehr als zu schnell: der Koerper bleibt nicht so lange starr.
+            else if speed < target * 0.6, elapsed > 4, now - progressTime < 5 { say("Schneller", now, gap: 6) }
+            // Abgebrochen wird trotzdem nur, wenn es 15 Sekunden lang nicht mehr vorwaerts geht,
+            // oder nach dem Vierfachen der Richtzeit.
             if abs(turned) > progressAngle + 10 {
                 progressAngle = abs(turned)
                 progressTime = now
@@ -310,6 +315,9 @@ public final class FlowEngine {
         }
         guard finished else { return }
         if phase == .turnBody {
+            if elapsed > options.turnSeconds * 1.5 {
+                notes.append("Körper: Drehung zu langsam (\(Int(elapsed.rounded())) s statt etwa \(Int(options.turnSeconds)) s), der Splat wird unscharf.")
+            }
             marks["turnEnd"] = now
             degrees["turnedDegrees"] = Int(turned.rounded())
             enter(options.motion ? .motion : (options.face ? .poseFace : .done), now)

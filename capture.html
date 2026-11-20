@@ -40,7 +40,7 @@
     <label>Kamera B – nur Kontrolle (optional)<select id="camB"></select></label>
     <label>Name<input id="name" value="aufnahme"></label>
     <label>Leerer Raum (s)<input id="tBg" type="number" min="1" value="4"></label>
-    <label>Drehung etwa (s)<input id="tTurn" type="number" min="3" value="30"></label>
+    <label>Drehung etwa (s)<input id="tTurn" type="number" min="3" value="20"></label>
     <label>Bild drehen<select id="rot"><option value="0">nein</option><option value="90">90° nach rechts</option><option value="270">90° nach links</option></select></label>
     <label>Gesichtsscan<select id="face"><option value="1">ja</option><option value="0">nein</option></select></label>
     <label>&nbsp;<a href="./">Live-Avatar</a></label>
@@ -298,7 +298,7 @@ async function pose(label, notes, A) {
 
 // Zaehlt den Drehwinkel aus der Schulterlinie mit, bis 360 Grad voll sind. Liefert die Gradzahl.
 async function turn(label, notes, A, turnSeconds) {
-  say('Jetzt langsam drehen.');
+  say('Jetzt zügig und gleichmässig drehen, Arme ruhig.');
   const calls = [[0.25, 'Viertel'], [0.5, 'Halb'], [0.75, 'Drei Viertel']];
   let turned = 0, prevYaw = A.yaw, prevT = performance.now(), speed = 0;
   const t0 = performance.now();
@@ -316,10 +316,16 @@ async function turn(label, notes, A, turnSeconds) {
     if (A.yaw !== null) { prevYaw = A.yaw; prevT = now; }
     const f = Math.abs(turned) / 360;
     progress(f);
-    phase(`${label}: langsam drehen – ${Math.round(Math.abs(turned))}°`, true);
+    phase(`${label}: gleichmässig drehen – ${Math.round(Math.abs(turned))}°`, true);
     while (calls.length && f >= calls[0][0]) say(calls.shift()[1]);
     if (speed > (360 / turnSeconds) * 1.8 && elapsed > 2) say('Langsamer', 5);
-    if (f >= 0.985) break;
+    // Zu langsam schadet mehr als zu schnell: je laenger die Drehung, desto mehr bewegt sich der Koerper.
+    else if (speed < (360 / turnSeconds) * 0.6 && elapsed > 4) say('Schneller', 6);
+    if (f >= 0.985) {
+      if (elapsed > turnSeconds * 1.5)
+        notes.push(`${label}: Drehung zu langsam (${Math.round(elapsed)} s statt etwa ${turnSeconds} s), der Splat wird unscharf.`);
+      break;
+    }
     if (elapsed > turnSeconds * 2 || (elapsed > turnSeconds * 1.2 && f < 0.5)) {
       notes.push(`${label}: Drehwinkel unsicher (${Math.round(Math.abs(turned))} Grad gezaehlt), nach Zeit beendet.`);
       break;

@@ -44,7 +44,7 @@ struct CaptureView: View {
                     Toggle("Leerer Raum zuerst (\(Int(model.options.bgSeconds)) s)", isOn: $model.options.background)
                     if model.mode == .body {
                         TextField("Drehung etwa (s)", value: $model.options.turnSeconds, format: .number)
-                            .help("Nur ein Richtwert für die Ansage «Langsamer»; langsamer drehen ist erlaubt")
+                            .help("Richtzeit für eine Umdrehung; die App sagt «Langsamer» oder «Schneller». Deutlich langsamer macht den Splat unscharf")
                         Toggle("Danach frei bewegen (\(Int(model.options.motionSeconds)) s, für später)", isOn: $model.options.motion)
                     }
                 }

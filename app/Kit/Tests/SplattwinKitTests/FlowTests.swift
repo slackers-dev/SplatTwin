@@ -88,6 +88,7 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(said.filter { $0 == "Halb" }.count, 2)
         XCTAssertEqual(said.last, "Fertig.")
         XCTAssertFalse(said.contains("Langsamer"))
+        XCTAssertFalse(said.contains("Schneller"))
     }
 
     func testEmptyRoomNeedsAllCameras() {
@@ -158,17 +159,20 @@ final class FlowTests: XCTestCase {
         XCTAssertTrue(flow.notes.isEmpty, "\(flow.notes)")
     }
 
-    func testSlowTurnIsNotCutOff() {
+    func testSlowTurnIsNotCutOffButCalledOut() {
         let flow = engine { $0.background = false; $0.face = false }
         flow.start(now: now)
         run(flow, 3) { _ in self.person() }
-        // Eine Runde in 72 Sekunden, wie in der Aufnahme scan-1209: frueher wurde nach 36 Sekunden abgebrochen.
+        // Eine Runde in 72 Sekunden, wie in der Aufnahme scan-1209: wird nicht abgebrochen, aber angemahnt,
+        // weil der Koerper so lange nicht starr bleibt (unscharfer Splat).
         let start = now
         run(flow, 200) { t in self.person(yaw: t * 5) }
         XCTAssertEqual(flow.phase, .done)
         XCTAssertEqual(now - start, 360 * 0.985 / 5, accuracy: 0.5)
         XCTAssertEqual(Double(flow.degrees["turnedDegrees"]!), 355, accuracy: 2)
-        XCTAssertTrue(flow.notes.isEmpty, "\(flow.notes)")
+        XCTAssertTrue(said.contains("Schneller"))
+        XCTAssertEqual(flow.notes.count, 1)
+        XCTAssertTrue(flow.notes[0].contains("Drehung zu langsam (71 s"), "\(flow.notes)")
     }
 
     func testTurnStoppingHalfwayEndsAfterStall() {
