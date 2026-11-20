@@ -1,0 +1,54 @@
+# --- System ---
+.DS_Store
+Thumbs.db
+
+# --- Yappy ---
+.yappy/
+**/.yappy/
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# --- Bilder & Videos ---
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.m4v
+*.avi
+*.mkv
+*.webm
+*.jpg
+*.JPG
+*.jpeg
+*.heic
+*.HEIC
+*.png
+*.PNG
+*.gif
+*.tif
+*.tiff
+*.exr
+# Ausnahme: Kalibrier-Schachbrett wird von der App gebraucht
+!/schachbrett.png
+
+# --- Splat-Pipeline: Daten, Ergebnisse, Tools ---
+splat/captures/
+splat/runs/
+splat/target/
+splat/tools/
+*.ply
+*.splat
+*.ksplat
+*.task
+
+# --- Xcode / Swift ---
+app/build/
+app/Kit/.build/
+app/Kit/.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/

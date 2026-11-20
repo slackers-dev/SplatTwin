@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splattwin – Live-Avatar</title>
+<style>
+  :root { color-scheme: dark; --bg: #14161a; --panel: #1e2127ee; --line: #343944; --text: #e6e8ec; --dim: #9aa1ad; --accent: #6cc4a1; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel { position: fixed; top: 12px; left: 12px; width: 270px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  #panel h1 { margin: 0 0 10px; font-size: 15px; }
+  #panel label { display: block; margin: 8px 0 2px; color: var(--dim); }
+  #panel [hidden] { display: none; }
+  #panel label.check { display: flex; gap: 8px; align-items: center; color: var(--text); }
+  #panel input[type=range] { width: 100%; accent-color: var(--accent); }
+  #panel select { width: 100%; margin-top: 8px; padding: 6px; background: #2a2f38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  #panel input[type=checkbox] { accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  button, .filebtn { flex: 1; padding: 7px 8px; background: #2a2f38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; cursor: pointer; text-align: center; }
+  button:hover, .filebtn:hover { border-color: var(--accent); }
+  .filebtn input { display: none; }
+  #status { margin-top: 10px; color: var(--dim); font-variant-numeric: tabular-nums; min-height: 2.8em; }
+  #preview { position: fixed; right: 12px; bottom: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; }
+  #preview .cam { position: relative; width: fit-content; margin: 0 auto; }
+  #preview .cam + .cam { border-top: 1px solid var(--line); }
+  #preview .cam[hidden] { display: none; }
+  #preview video { display: block; width: auto; max-width: 300px; max-height: 38vh; }
+  #preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #preview .tag { position: absolute; top: 6px; left: 8px; font-size: 11px; color: #fff; background: #0008; padding: 1px 6px; border-radius: 4px; }
+  #panel { max-height: calc(100% - 24px); overflow-y: auto; }
+  #panel h2 { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; }
+  .fov { display: flex; gap: 8px; }
+  .fov label { flex: 1; }
+  .fov input { width: 100%; padding: 5px; background: #2a2f38; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  #stereoStatus, #intrStatus { margin-top: 8px; color: var(--dim); font-size: 12px; white-space: pre-line; }
+  #chess { position: fixed; inset: 0; z-index: 10; background: #fff; color: #222; display: flex; align-items: center; justify-content: center; }
+  #chess[hidden] { display: none; }
+  #board { display: grid; grid-template-columns: repeat(10, 1fr); width: min(62vw, calc(62vh * 10 / 7)); aspect-ratio: 10 / 7; }
+  #board i { background: #000; }
+  #board i.w { background: #fff; }
+  #chessVideo { max-width: 80vw; max-height: 80vh; }
+  /* Kleine Vorschau neben dem Brett: bewusst blass, damit die Kamera das Brett darin nicht mit dem echten verwechselt. */
+  #chessVideo.mini { position: absolute; right: 16px; bottom: 14px; width: 260px; max-height: 30vh; opacity: 0.75; filter: contrast(0.45) brightness(1.25); border: 1px solid #ccc; }
+  #chess [hidden] { display: none; }
+  #chessInfo { position: absolute; top: 14px; left: 16px; right: 16px; font-size: 15px; color: #555; }
+  #chessSide { position: absolute; left: 16px; bottom: 14px; display: flex; gap: 12px; align-items: flex-end; }
+  #coverage { width: 176px; height: 99px; border: 1px solid #ccc; background: #fafafa; }
+  #chess button { flex: none; background: #f2f2f2; color: #222; border-color: #ccc; }
+  .mirror #preview, .mirror #scene { transform: scaleX(-1); }
+  .legend { margin-top: 8px; color: var(--dim); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+    "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.4.0/spark.module.js",
+    "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="panel">
+  <h1>Splattwin · Live-Avatar</h1>
+  <div class="row">
+    <button id="btnCam">Webcam starten</button>
+    <label class="filebtn" style="margin:0;color:var(--text)">Video laden<input id="file" type="file" accept="video/*"></label>
+  </div>
+
+  <select id="camera" hidden></select>
+
+  <label class="check" style="margin-top:12px"><input id="kalman" type="checkbox" checked> Kalman-Filter (bei zwei Kameras: EKF-Fusion)</label>
+  <label>Prozessrauschen σ<sub>a</sub>: <span id="sigmaAVal"></span> m/s²</label>
+  <input id="sigmaA" type="range" min="0.5" max="40" step="0.5" value="8">
+  <label>Messrauschen σ<sub>z</sub>: <span id="sigmaZVal"></span> cm</label>
+  <input id="sigmaZ" type="range" min="0.2" max="10" step="0.2" value="2">
+
+  <label class="check" style="margin-top:10px"><input id="debug" type="checkbox" checked> Skelett anzeigen</label>
+  <label class="check"><input id="fingers" type="checkbox" checked> Finger tracken</label>
+  <label class="check"><input id="move" type="checkbox" checked> Bewegung im Raum</label>
+  <label class="check"><input id="mirror" type="checkbox"> Spiegeln</label>
+  <label class="check"><input id="splat" type="checkbox" disabled> Splat statt Roboter</label>
+  <div class="row"><button id="btnCenter">Position zurücksetzen</button></div>
+
+  <h2>Zweite Kamera (Stereo)</h2>
+  <select id="cameraB" hidden></select>
+  <div class="row">
+    <button id="btnCamB">Zweite Kamera starten</button>
+  </div>
+  <label id="zoomBRow" hidden>Zoom Kamera B: <span id="zoomBVal"></span>×<input id="zoomB" type="range"></label>
+  <div id="camBInfo" style="color:var(--dim);font-size:12px;margin-top:6px"></div>
+  <div class="fov">
+    <label>Öffnungswinkel A (°)<input id="fovA" type="number" min="20" max="120" step="1" value="50"></label>
+    <label>Öffnungswinkel B (°)<input id="fovB" type="number" min="20" max="120" step="1" value="40"></label>
+  </div>
+  <div class="row">
+    <button id="btnCalib">Kalibrieren (12 s)</button>
+    <button id="btnCalibClear">Löschen</button>
+  </div>
+  <div id="stereoStatus">Nicht kalibriert.</div>
+
+  <h2>Schachbrett-Kalibrierung</h2>
+  <div class="row">
+    <button id="btnChessA">Kamera A</button>
+    <button id="btnChessB">Kamera B</button>
+    <button id="btnChessClear">Löschen</button>
+  </div>
+  <div id="intrStatus"></div>
+
+  <div class="legend"><i style="background:#e5625e"></i>Messung &nbsp; <i style="background:#6cc4a1"></i>gefiltert</div>
+  <div id="status">Lade Modelle …</div>
+</div>
+
+<div id="preview">
+  <div class="cam" id="camBBox" hidden>
+    <video id="videoB" playsinline muted loop></video>
+    <canvas id="overlayB"></canvas>
+    <span class="tag">B</span>
+  </div>
+  <div class="cam">
+    <video id="video" playsinline muted loop></video>
+    <canvas id="overlay"></canvas>
+    <span class="tag">A</span>
+  </div>
+</div>
+
+<div id="chess" hidden>
+  <div id="chessInfo"></div>
+  <div id="board"></div>
+  <video id="chessVideo" playsinline muted loop hidden></video>
+  <div id="chessSide">
+    <canvas id="coverage" width="352" height="198"></canvas>
+    <button id="btnChessCancel">Abbrechen</button>
+  </div>
+</div>
+
+<!-- Kameras der Splattwin-App (projekt/app) als normale Kameras anbieten; ohne laufende App ohne Wirkung. -->
+<script type="module" src="./app-kamera.js"></script>
+<script type="module" src="./main.js"></script>
+</body>
+</html>

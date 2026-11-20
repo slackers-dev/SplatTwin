@@ -1,0 +1,4 @@
+// Einstellungen dieses Rechners. Wer das Projekt auf einem anderen Mac baut, traegt hier
+// sein eigenes Entwicklerteam ein (Xcode › Settings › Accounts) und waehlt einen eigenen Praefix.
+DEVELOPMENT_TEAM = 3LKAN72M75
+SPLATTWIN_BUNDLE_PREFIX = dev.splattwin.t3lkan72m75

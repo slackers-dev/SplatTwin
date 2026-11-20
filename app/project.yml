@@ -1,0 +1,80 @@
+# Beschreibung des Xcode-Projekts. Daraus erzeugt `xcodegen generate` die Datei Splattwin.xcodeproj.
+# Nach dem Hinzufuegen oder Loeschen von Dateien einmal neu erzeugen.
+name: Splattwin
+options:
+  bundleIdPrefix: ch.splattwin
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+  developmentLanguage: de
+packages:
+  SplattwinKit:
+    path: Kit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # Eigenes Entwicklerteam: in Local.xcconfig eintragen (siehe README), nicht hier.
+    DEAD_CODE_STRIPPING: YES
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+targets:
+  SplattwinKamera:
+    type: application
+    platform: iOS
+    sources: [iOS]
+    dependencies:
+      - package: SplattwinKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPLATTWIN_BUNDLE_PREFIX).kamera
+        PRODUCT_NAME: Splattwin Kamera
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Splattwin Kamera
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSCameraUsageDescription: Splattwin nimmt die Person für den 3D-Scan auf und schickt das Livebild an den Mac.
+        NSLocalNetworkUsageDescription: Splattwin verbindet sich im lokalen Netz mit der Mac-App, die die Kamera steuert.
+        NSBonjourServices: [_splattwin._tcp]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+  Splattwin:
+    type: application
+    platform: macOS
+    sources:
+      - path: Mac
+        excludes: ["Resources/**"]
+      - path: Mac/Resources
+        buildPhase: resources
+    dependencies:
+      - package: SplattwinKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SPLATTWIN_BUNDLE_PREFIX).mac
+        PRODUCT_NAME: Splattwin
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_APP_SANDBOX: NO
+        GENERATE_INFOPLIST_FILE: YES
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleDisplayName: Splattwin
+        LSApplicationCategoryType: public.app-category.photography
+        NSCameraUsageDescription: Splattwin nutzt die Kamera des Macs als weitere Kamera für Aufnahme und Tracking.
+        NSLocalNetworkUsageDescription: Splattwin sucht im lokalen Netz nach iPhones mit der App Splattwin Kamera.
+        NSBonjourServices: [_splattwin._tcp]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # Ordner «projekt» mit server.py und splat/: von hier aus startet die App Pipeline und Server.
+        SplattwinProjectDir: $(SRCROOT)/..

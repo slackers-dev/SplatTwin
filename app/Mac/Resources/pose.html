@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Splattwin – Körpererkennung</title>
+<script type="importmap">
+{ "imports": { "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs" } }
+</script>
+</head>
+<body>
+<script type="module">
+// Koerpererkennung fuer die Mac-App. Laeuft unsichtbar in der App, holt die Livebilder aller
+// Kameras ueber die lokale Bruecke und meldet pro Bild, was sie sieht. Die Pruefungen sind
+// dieselben wie in capture.html, damit sich die App gleich verhaelt wie der Prototyp.
+import { PoseLandmarker, FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+
+const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task';
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+const LM = { nose: 0, lSh: 11, rSh: 12, lEl: 13, rEl: 14, lWr: 15, rWr: 16, lHip: 23, rHip: 24, lAn: 27, rAn: 28 };
+const PORT = new URLSearchParams(location.search).get('port') || location.port || 8932;
+
+const report = (message) => window.webkit?.messageHandlers?.pose?.postMessage(JSON.stringify(message));
+const cams = new Map(); // Kamera -> { landmarker, latest, busy }
+let fileset = null;
+let socket = null;
+
+// Gesichtsmodell: nur fuer die Kamera und nur solange die App es verlangt (Gesichtsscan), es kostet Rechenzeit.
+let faceCamera = null;
+let face = null;
+let faceDelegate = 'GPU';
+window.setFaceCamera = (id) => { faceCamera = id; };
+
+// Das Modell laedt im Hintergrund, gleich nach dem Start: so wartet im Gesichtsscan niemand darauf,
+// und die Koerpererkennung laeuft waehrenddessen weiter.
+let faceLoading = null;
+function loadFace() {
+  faceLoading ??= FaceLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: FACE_MODEL, delegate: faceDelegate }, runningMode: 'VIDEO', numFaces: 1,
+    outputFacialTransformationMatrixes: true,
+  }).then((model) => { face = model; }).catch((err) => {
+    faceLoading = null;
+    if (faceDelegate !== 'CPU') { faceDelegate = 'CPU'; loadFace(); }
+    else report({ type: 'error', text: `Gesichtsmodell lädt nicht: ${err.message}` });
+  });
+}
+
+// Kopfdrehung um die Hochachse in Grad, 0 = schaut in die Kamera; null, wenn kein Gesicht zu sehen ist
+// (oder das Modell noch laedt).
+function headYaw(bitmap) {
+  if (!face) { loadFace(); return null; }
+  try {
+    const matrix = face.detectForVideo(bitmap, performance.now()).facialTransformationMatrixes?.[0]?.data;
+    // Dritte Spalte der Drehmatrix = wohin das Gesicht zeigt (x seitlich, z zur Kamera).
+    return matrix ? Math.atan2(matrix[8], matrix[10]) * 180 / Math.PI : null;
+  } catch (err) {
+    face = null;
+    faceLoading = null;
+    if (faceDelegate !== 'CPU') faceDelegate = 'CPU';
+    report({ type: 'error', text: `Gesichtsmodell: ${err.message}` });
+    return null;
+  }
+}
+
+function analyse(result, time) {
+  const img = result.landmarks?.[0], world = result.worldLandmarks?.[0];
+  const seen = (i, min = 0.5) => (img[i].visibility ?? 1) >= min && img[i].x > 0.01 && img[i].x < 0.99 && img[i].y > 0.01 && img[i].y < 0.99;
+  const present = !!img && [LM.nose, LM.lSh, LM.rSh, LM.lHip, LM.rHip].filter((i) => (img[i].visibility ?? 1) > 0.5).length >= 2;
+  if (!present) return { present: false, hintBody: '', hintFace: '', time };
+  // Kopfgroesse im Bild: Abstand Nase bis Schulterlinie, als Anteil der Bildhoehe.
+  const shY = (img[LM.lSh].y + img[LM.rSh].y) / 2;
+  const head = shY - img[LM.nose].y;
+  const hintFace = !seen(LM.nose) ? 'Kopf nicht im Bild'
+    : img[LM.nose].y - 0.9 * head < 0.02 ? 'Kopf oben abgeschnitten, etwas zurück'
+    : head < 0.16 ? 'Näher kommen' : '';
+  const hintBody = !seen(LM.nose) ? 'Kopf nicht im Bild'
+    : !(seen(LM.lAn, 0.3) && seen(LM.rAn, 0.3)) ? 'Füsse nicht im Bild'
+    : !(seen(LM.lWr, 0.3) || seen(LM.rWr, 0.3)) ? 'Hände nicht im Bild' : '';
+  // Blickrichtung aus der Schulterlinie in 3D: 0 Grad = schaut in die Kamera.
+  const dx = world[LM.lSh].x - world[LM.rSh].x, dz = world[LM.lSh].z - world[LM.rSh].z;
+  // Winkel zwischen Oberkoerper und Arm: aendert er sich in der Drehung, haben sich die Arme bewegt.
+  const arm = (sh, wr, hip) => {
+    if ((world[sh].visibility ?? 1) < 0.6 || (world[wr].visibility ?? 1) < 0.6 || (world[hip].visibility ?? 1) < 0.6) return null;
+    const a = [world[wr].x - world[sh].x, world[wr].y - world[sh].y, world[wr].z - world[sh].z];
+    const b = [world[hip].x - world[sh].x, world[hip].y - world[sh].y, world[hip].z - world[sh].z];
+    const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return Math.acos(Math.max(-1, Math.min(1, dot / (Math.hypot(...a) * Math.hypot(...b) + 1e-9)))) * 180 / Math.PI;
+  };
+  const feet = Math.max(img[LM.lAn].y, img[LM.rAn].y);
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  return {
+    present: true, hintBody, hintFace, time,
+    yaw: Math.atan2(dz, dx) * 180 / Math.PI,
+    center: [(img[LM.lSh].x + img[LM.rSh].x) / 2, shY], // Schultermitte, auch in der Nahaufnahme sichtbar
+    size: feet - (img[LM.nose].y - head),
+    arms: [arm(LM.lSh, LM.lWr, LM.lHip), arm(LM.rSh, LM.rWr, LM.rHip)],
+    points: img.map((p) => [r3(p.x), r3(p.y), r3(p.visibility ?? 1)]),
+  };
+}
+
+async function work(id) {
+  const cam = cams.get(id);
+  if (!cam || cam.busy || !cam.latest) return;
+  cam.busy = true;
+  const { head, jpeg } = cam.latest;
+  cam.latest = null;
+  try {
+    // Eigene Instanz pro Kamera: im Video-Modus merkt sich das Modell den Verlauf.
+    cam.landmarker ??= await PoseLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: POSE_MODEL, delegate: cam.delegate ?? 'GPU' }, runningMode: 'VIDEO', numPoses: 1,
+    });
+    const bitmap = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
+    const result = cam.landmarker.detectForVideo(bitmap, performance.now());
+    const observation = analyse(result, head.t / 1000);
+    if (id === faceCamera) observation.headYaw = headYaw(bitmap);
+    bitmap.close();
+    report({ type: 'pose', id, observation });
+  } catch (err) {
+    // Faellt die Grafikkarte aus, rechnet das Modell auf dem Prozessor weiter.
+    if (cam.delegate !== 'CPU') { cam.delegate = 'CPU'; cam.landmarker = null; }
+    report({ type: 'error', text: `${id}: ${err.message}` });
+  }
+  cam.busy = false;
+  if (cam.latest) work(id);
+}
+
+function connect() {
+  socket = new WebSocket(`ws://127.0.0.1:${PORT}/`);
+  socket.binaryType = 'arraybuffer';
+  socket.onmessage = (event) => {
+    if (typeof event.data === 'string') {
+      const message = JSON.parse(event.data);
+      if (message.type !== 'cameras') return;
+      const ids = new Set(message.cameras.map((c) => c.id));
+      for (const id of ids) {
+        if (cams.has(id)) continue;
+        cams.set(id, { landmarker: null, latest: null, busy: false });
+        socket.send(JSON.stringify({ type: 'subscribe', id, maxFps: 20 }));
+      }
+      for (const [id, cam] of cams) {
+        if (ids.has(id)) continue;
+        cam.landmarker?.close();
+        cams.delete(id);
+      }
+      return;
+    }
+    const view = new DataView(event.data);
+    const count = view.getUint32(0, true);
+    const head = JSON.parse(new TextDecoder().decode(new Uint8Array(event.data, 4, count)));
+    const cam = cams.get(head.id);
+    if (!cam) return;
+    // Immer nur das neueste Bild: lieber eines auslassen als hinterherhinken.
+    cam.latest = { head, jpeg: new Uint8Array(event.data, 4 + count) };
+    work(head.id);
+  };
+  socket.onclose = () => {
+    cams.clear();
+    setTimeout(connect, 1000);
+  };
+}
+
+try {
+  fileset = await FilesetResolver.forVisionTasks(WASM_URL);
+  report({ type: 'ready' });
+  connect();
+  loadFace();
+} catch (err) {
+  report({ type: 'error', text: 'Körpererkennung lädt nicht (Internet nötig): ' + err.message });
+}
+</script>
+</body>
+</html>
