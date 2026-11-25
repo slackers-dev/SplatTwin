@@ -9,7 +9,10 @@
     "rootDir": "..",
     "tsBuildInfoFile": "../../.tsbuild/core.tsbuildinfo",
     "lib": ["ES2023"],
-    "types": []
+    "types": [],
+    // Matrizen und Vektoren fester Groesse, Indexzugriffe in Schleifen: das Flag braechte hier nur
+    // Ausrufezeichen. In der App (fehlende Gelenke) bleibt es an.
+    "noUncheckedIndexedAccess": false
   },
   "include": ["./**/*.ts", "../contracts/**/*.ts"],
   "exclude": ["../**/*.test.ts"]
