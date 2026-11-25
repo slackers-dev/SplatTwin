@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-rig.schema.json",
+  "title": "RunRig",
+  "description": "data/runs/<lauf>/rig.json: Gelenke der Person im Splat, in Weltkoordinaten (siehe run-splat). Schreiben: Pipeline (rig). Lesen: Splat-Avatar.",
+  "type": "object",
+  "required": ["joints", "source"],
+  "properties": {
+    "joints": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/jointName" },
+      "additionalProperties": { "$ref": "#/$defs/vec3" }
+    },
+    "source": {
+      "type": "object",
+      "description": "Woher jedes Gelenk stammt: aus mehreren Bildern trianguliert oder ersatzweise aus einem Bild.",
+      "propertyNames": { "$ref": "#/$defs/jointName" },
+      "additionalProperties": { "enum": ["trianguliert", "ein Bild"] }
+    }
+  },
+  "$defs": {
+    "vec3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "jointName": {
+      "enum": ["nose", "lEar", "rEar", "lSh", "rSh", "lEl", "rEl", "lWr", "rWr", "lHip", "rHip", "lKn", "rKn", "lAn", "rAn"]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capture.schema.json",
+  "title": "Capture",
+  "description": "Metadatei einer Aufnahme: data/captures/<name>.json. Schreiben: capture.html und die Mac-App. Lesen: splattwin process. Alle Zeiten in Sekunden im Video der Kamera a.",
+  "type": "object",
+  "required": ["name", "marks", "offset", "saved", "notes"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,40}$" },
+    "marks": {
+      "type": "object",
+      "description": "Zeitmarken der Phasen. bgStart/bgEnd: leerer Raum, turnStart/turnEnd: Körperdrehung, faceStart/faceEnd: Gesichtsscan.",
+      "properties": {
+        "bgStart": { "type": "number" },
+        "bgEnd": { "type": "number" },
+        "turnStart": { "type": "number" },
+        "turnEnd": { "type": "number" },
+        "turnedDegrees": { "type": "number" },
+        "faceStart": { "type": "number" },
+        "faceEnd": { "type": "number" },
+        "faceDegrees": { "type": "number" }
+      },
+      "additionalProperties": { "type": "number" }
+    },
+    "offset": { "type": "number", "description": "So viel später liegt ein Ereignis in Video b als in Video a." },
+    "saved": {
+      "type": "object",
+      "description": "Gespeicherte Videos je Kamera (a, b).",
+      "required": ["a"],
+      "additionalProperties": { "$ref": "#/$defs/savedVideo" }
+    },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "mime": { "type": "string", "description": "Format des Browser-Rekorders (nur capture.html)." },
+    "height": { "type": "number", "exclusiveMinimum": 0, "description": "Körpergrösse in Metern, legt den Massstab des Splats fest (nur Mac-App)." },
+    "body": { "type": "string", "description": "Nur beim Gesichtsscan als eigener Aufnahme: Name der Körper-Aufnahme, auf die der Kopf gehört." },
+    "app": { "type": "object", "description": "Zusatzangaben der Mac-App (Kameras, Einstellungen), frei." }
+  },
+  "$defs": {
+    "savedVideo": {
+      "type": "object",
+      "required": ["saved", "width", "height", "seconds"],
+      "properties": {
+        "saved": { "type": "string", "description": "Dateiname in data/captures/." },
+        "width": { "type": "integer", "minimum": 0 },
+        "height": { "type": "integer", "minimum": 0 },
+        "seconds": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
