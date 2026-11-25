@@ -16,6 +16,7 @@ oder Mac-App        Video → Masken → COLMAP → Brush       Kamera → Pose 
 | [`contracts/`](contracts/) | Datenformate zwischen den Teilen als JSON-Schema |
 | [`app/`](app/) | Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md) |
 | [`docs/`](docs/) | [Architektur](docs/architektur.md), [Konventionen](docs/konventionen.md), [Anforderungen an die App](docs/app-anforderungen.md), [Notizen zum SMPL-Avatar](docs/notizen-smpl-avatar.md) |
+| [`project-documentation/`](project-documentation/) | Verlauf und Entscheidungen des Projekts |
 | `data/` | Aufnahmen, Läufe und Tools, **nicht im Repo** |
 
 ## Einrichten nach dem Klonen
