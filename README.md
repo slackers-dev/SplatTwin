@@ -2,67 +2,99 @@
 
 Projekt im Modul CVAI: eine Person als Gaussian Splat aufnehmen und live per Kamera-Tracking bewegen.
 
-- **Web-Seiten** (`index.html`, `capture.html`, `splat.html`, JS-Dateien, `server.py`): Tracking, Aufnahme, Splat-Viewer
-- **Splat-Pipeline** (`splat/`): Video → Einzelbilder → Masken → COLMAP → Brush → `splat.ply`
-- **Apps** (`app/`): Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md)
-- Anforderungen: [`APP_ANFORDERUNGEN.md`](APP_ANFORDERUNGEN.md)
+```
+Aufnahme            Rekonstruktion                       Live-Avatar
+capture.html   ──►  splattwin process                ──►  tracking.html
+oder Mac-App        Video → Masken → COLMAP → Brush       Kamera → Pose → Filter → Skelett → Splat
+                    → splat.ply, splat.json, rig.json     live.html: Zuschauer im WLAN
+```
+
+| Ordner | Inhalt |
+|---|---|
+| [`web/`](web/) | Seiten in TypeScript (Vite): Tracking, Aufnahme, Viewer, Zuschauen |
+| [`python/`](python/) | Paket `splattwin`: Pipeline (Video → Splat) und lokaler Server |
+| [`contracts/`](contracts/) | Datenformate zwischen den Teilen als JSON-Schema |
+| [`app/`](app/) | Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md) |
+| [`docs/`](docs/) | [Architektur](docs/architektur.md), [Konventionen](docs/konventionen.md), [Anforderungen an die App](docs/app-anforderungen.md), [Notizen zum SMPL-Avatar](docs/notizen-smpl-avatar.md) |
+| `data/` | Aufnahmen, Läufe und Tools, **nicht im Repo** |
 
 ## Einrichten nach dem Klonen
 
-Voraussetzungen (Homebrew): `uv`, `ffmpeg`, `colmap`. Für die Apps zusätzlich Xcode 26.
-
-Grosse Dateien sind **nicht im Repo** und müssen selbst geholt werden. Sie gehören nach `splat/tools/`:
+Voraussetzungen (Homebrew): `uv`, `node` (ab 22), `ffmpeg`, `colmap` (getestet mit COLMAP 4.2). Für die Apps
+zusätzlich Xcode 26.
 
 ```sh
-cd splat
-mkdir -p tools/brush
+brew install uv node ffmpeg colmap
+make setup        # Python-Umgebung (uv sync), npm-Pakete, Seiten bauen
 ```
 
-### 1. Brush (Splat-Training)
+`make` allein zeigt alle Ziele.
 
-Die Pipeline erwartet `splat/tools/brush/brush-app-aarch64-apple-darwin/brush_app` (getestet mit Version 0.3.0).
+**Python:** Alles Python-seitige teilt eine Umgebung (`.venv` im Projektordner). Die genauen Versionen
+stehen in `uv.lock`; Python 3.12 ist über `.python-version` festgelegt, weil es mediapipe nur bis 3.12 gibt.
+Neue Pakete mit `uv add --package splattwin <paket>`, nicht mit `pip`.
+
+**Web:** `web/` ist ein npm-Projekt. Neue Pakete mit `npm install <paket>` in `web/`.
+
+### Tools in data/tools/
+
+Grosse Dateien sind nicht im Repo. Die Pipeline erwartet Brush unter
+`data/tools/brush/brush-app-aarch64-apple-darwin/brush_app` (getestet mit Version 0.3.0):
 
 ```sh
-cd splat/tools/brush
+mkdir -p data/tools/brush && cd data/tools/brush
 curl -LO https://github.com/ArthurBrussee/brush/releases/download/v0.3.0/brush-app-aarch64-apple-darwin.tar.xz
 tar -xf brush-app-aarch64-apple-darwin.tar.xz
 xattr -dr com.apple.quarantine brush-app-aarch64-apple-darwin   # sonst blockiert macOS das Programm
 ```
 
-Releases: https://github.com/ArthurBrussee/brush/releases
+Das MediaPipe-Modell (`data/tools/pose_landmarker_heavy.task`) lädt die Pipeline beim ersten Gebrauch selbst.
+Mit `SPLATTWIN_DATA=<ordner>` liegt `data/` woanders.
 
-### 2. MediaPipe Pose-Modell
-
-`rig_splat.py` und `merge_head.py` laden `splat/tools/pose_landmarker_heavy.task` beim ersten Start selbst herunter.
-Das klappt nur, wenn der Ordner `splat/tools/` schon existiert (siehe `mkdir` oben). Von Hand:
+## Starten
 
 ```sh
-curl -L -o splat/tools/pose_landmarker_heavy.task \
-  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task
+make serve        # Seiten bauen, Server starten: http://127.0.0.1:8931
+make dev          # zum Entwickeln: Server und Vite mit Neuladen (Adresse zeigt Vite)
 ```
 
-### 3. Python
+Die Startseite verlinkt alle Seiten. Die Kamera gibt Chrome nur über `127.0.0.1` oder `localhost` frei.
 
-Die Skripte in `splat/` geben ihre Pakete im Kopf an (PEP 723). Mit `uv run` wird alles automatisch installiert:
+### Splat aus einem Video
 
 ```sh
-cd splat
-uv run splat_pipeline.py video.mov --bg-start 1 --bg-seconds 4 --start 8 --end 30
+uv run splattwin splat video.mov --bg-start 1 --bg-seconds 4 --start 8 --end 26 --height 1.80
+uv run splattwin rig video
 ```
 
-## Live zuschauen
+Ergebnis in `data/runs/video/`, ansehen mit `viewer.html?run=video`, als Avatar `tracking.html?run=video`.
+Eine Aufnahme aus `capture.html` oder der App rechnet `uv run splattwin process <name>` in einem Schritt
+(Splat, Kopf, Gelenke). Hinweise für gute Aufnahmen: [`docs/notizen-smpl-avatar.md`](docs/notizen-smpl-avatar.md).
+
+### Live zuschauen
 
 Die Tracking-Seite kann den Avatar live an andere Seiten senden: nur die Gelenkpunkte, kein Video.
 
 ```sh
-.venv/bin/python server.py 8931 --lan   # ohne --lan nur auf diesem Rechner
+uv run splattwin serve --lan   # ohne --lan nur auf diesem Rechner
 ```
 
 Auf der Tracking-Seite «Avatar an Zuschauer senden» einschalten; dort steht auch die Adresse für andere
 Geräte im WLAN (`http://<IP>:8931/live.html`). Geräte im Netz sehen nur die Zuschauerseite und den Splat,
 senden, aufnehmen und kalibrieren geht nur am Rechner selbst.
 
+## Entwickeln
+
+```sh
+make check        # Lint, Typen, Tests (dasselbe wie die CI)
+make swift-test   # Tests der App
+```
+
+Commits nach [Conventional Commits](https://www.conventionalcommits.org): `feat:`, `fix:`, `refactor:`,
+`test:`, `docs:`, `build:`, `ci:`, `chore:`, mit Bereich in Klammern, wo es hilft (`feat(web): …`,
+`fix(python): …`).
+
 ## Was nicht ins Repo kommt
 
-Siehe `.gitignore`: Bilder und Videos, Aufnahmen (`splat/captures/`), Ergebnisse (`splat/runs/`),
-Tools (`splat/tools/`), Build-Ordner, `.venv` und `.yappy`.
+Siehe `.gitignore`: `data/` (Aufnahmen, Läufe, Tools), Bilder und Videos, `web/dist`, `node_modules`,
+`.venv` und Caches.

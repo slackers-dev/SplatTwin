@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./.tsbuild/app",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./.tsbuild/app.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/core/**", "src/contracts/**", "src/**/*.test.ts"],
+  "references": [{ "path": "./src/core" }]
+}

@@ -1,0 +1,7 @@
+:root { color-scheme: dark; --bg: #14161a; --panel: #1e2127ee; --line: #343944; --text: #e6e8ec; --dim: #9aa1ad; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+canvas { position: fixed; inset: 0; display: block; }
+#panel { z-index: 1; position: fixed; top: 12px; left: 12px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+#panel h1 { margin: 0 0 4px; font-size: 15px; }
+#panel p { margin: 0; color: var(--dim); }
+#panel a { color: var(--text); }

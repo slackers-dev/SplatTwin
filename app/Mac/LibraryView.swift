@@ -28,7 +28,7 @@ struct LibraryView: View {
             } else {
                 ContentUnavailableView("Noch keine Aufnahme", systemImage: "square.stack.3d.up",
                                        description: Text(model.store.isValid ? "Unter «Aufnahme» die erste Drehung aufnehmen."
-                                                         : "Projektordner wählen: darin liegen server.py und der Ordner splat."))
+                                                         : "Projektordner wählen: darin liegen python/, web/ und data/."))
             }
         }
         .navigationTitle("Aufnahmen")
@@ -61,8 +61,8 @@ private struct CaptureDetail: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(model.pipelineRunning)
                 }
-                Button("Splat ansehen") { model.openPage("splat.html?run=\(entry.name)") }.disabled(!entry.hasSplat)
-                Button("Avatar testen") { model.openPage("index.html?run=\(entry.name)") }.disabled(!entry.hasSplat)
+                Button("Splat ansehen") { model.openPage("viewer.html?run=\(entry.name)") }.disabled(!entry.hasSplat)
+                Button("Avatar testen") { model.openPage("tracking.html?run=\(entry.name)") }.disabled(!entry.hasSplat)
                 Menu {
                     Button("Exportieren …") { model.export(entry.name) }
                     Button("Im Finder zeigen") { model.reveal(entry.name) }
@@ -174,8 +174,8 @@ struct TrackingView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Die Tracking-Seite läuft weiter im Browser. Die Kameras dieser App erscheinen dort in der Kameraliste als «Splattwin: …» und bringen Aufnahmezeit und Kameradaten zu jedem Bild mit.")
                         HStack {
-                            Button("Live-Avatar öffnen") { model.openPage("index.html") }.buttonStyle(.borderedProminent)
-                            Label(model.serverRunning ? "server.py läuft" : "server.py wird beim Öffnen gestartet",
+                            Button("Live-Avatar öffnen") { model.openPage("tracking.html") }.buttonStyle(.borderedProminent)
+                            Label(model.serverRunning ? "Server läuft" : "Server wird beim Öffnen gestartet",
                                   systemImage: model.serverRunning ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(model.serverRunning ? .green : .secondary)
                             Spacer()

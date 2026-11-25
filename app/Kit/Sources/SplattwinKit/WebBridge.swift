@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-/// Bruecke zum Browser: stellt die Kameras der App der Tracking-Seite (index.html) zur Verfuegung,
+/// Bruecke zum Browser: stellt die Kameras der App der Tracking-Seite (tracking.html) zur Verfuegung,
 /// mit Aufnahmezeit und Kameradaten zu jedem Bild (T-1, T-3, T-7). Nur auf diesem Rechner erreichbar.
 ///
 /// Textnachrichten sind JSON. Ein Bild ist binaer: [Laenge u32 LE][JSON-Kopf][JPEG].

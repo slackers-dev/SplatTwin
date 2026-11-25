@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "live-frame.schema.json",
+  "title": "LiveFrame",
+  "description": "Ein Bild des Live-Trackings, nur Punkte und kein Video. Schreiben: Tracking-Seite (POST /api/live). Lesen: Zuschauerseite (GET /api/live, Server-Sent Events). Koordinaten wie im Avatar (three.js, Meter, relativ zur Hüfte).",
+  "type": "object",
+  "required": ["t", "run", "upper", "mirror", "pos", "pts", "hands"],
+  "properties": {
+    "t": { "type": "number", "description": "Zeitpunkt beim Sender in ms (performance.now)." },
+    "run": { "type": "string", "description": "Lauf, dessen Splat die Tracking-Seite zeigt." },
+    "upper": { "type": "boolean", "description": "Nur Oberkörper: Hüfte und Beine stehen still." },
+    "mirror": { "type": "boolean" },
+    "pos": {
+      "type": "array",
+      "description": "Position des Avatars am Boden [x, z] in Metern.",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "pts": { "type": "array", "tsType": "([number, number, number] | null)[]", "description": "33 Gelenke von MediaPipe Pose, null = unbekannt.", "items": { "$ref": "#/$defs/point" }, "minItems": 33, "maxItems": 33 },
+    "hands": {
+      "type": "object",
+      "required": ["Left", "Right"],
+      "properties": {
+        "Left": { "$ref": "#/$defs/hand" },
+        "Right": { "$ref": "#/$defs/hand" }
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "oneOf": [
+        { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        { "type": "null" }
+      ]
+    },
+    "hand": {
+      "oneOf": [
+        { "type": "array", "tsType": "([number, number, number] | null)[]", "description": "21 Punkte von MediaPipe Hands.", "items": { "$ref": "#/$defs/point" }, "minItems": 21, "maxItems": 21 },
+        { "type": "null" }
+      ]
+    }
+  }
+}

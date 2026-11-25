@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "intrinsics.schema.json",
+  "title": "Intrinsics",
+  "description": "Kameradaten unabhängig von der Auflösung: fx und cx bezogen auf die Bildbreite, fy und cy auf die Bildhöhe. Schreiben: Schachbrett-Kalibrierung (Server) und App-Kameras (app-bridge). Lesen: Tracking.",
+  "type": "object",
+  "required": ["fx", "fy", "cx", "cy", "dist", "width", "height", "fovX", "fovY"],
+  "properties": {
+    "fx": { "type": "number", "exclusiveMinimum": 0 },
+    "fy": { "type": "number", "exclusiveMinimum": 0 },
+    "cx": { "type": "number" },
+    "cy": { "type": "number" },
+    "dist": {
+      "type": "array",
+      "description": "OpenCV-Verzeichnung k1, k2, p1, p2, k3. App-Kameras: Nullen, das Bild ist bereits entzerrt.",
+      "items": { "type": "number" },
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "width": { "type": "integer", "minimum": 0, "description": "Auflösung, bei der gemessen wurde (Pixel)." },
+    "height": { "type": "integer", "minimum": 0 },
+    "fovX": { "type": "number", "description": "Horizontaler Öffnungswinkel in Grad." },
+    "fovY": { "type": "number", "description": "Vertikaler Öffnungswinkel in Grad." },
+    "rms": { "type": "number", "minimum": 0, "description": "Rückprojektionsfehler in Pixeln (Schachbrett)." },
+    "views": { "type": "integer", "minimum": 0, "description": "Anzahl verwendeter Ansichten des Schachbretts." },
+    "source": { "type": "string", "description": "App-Kameras: device (vom Gerät gemessen) oder fov (aus dem Öffnungswinkel)." },
+    "distortion": { "type": "string", "description": "App-Kameras: corrected, uncorrected oder unknown." }
+  }
+}

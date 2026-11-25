@@ -256,7 +256,7 @@ final class StoreTests: XCTestCase {
                                app: .init(created: "2026-11-19T21:00:00Z", options: FlowOptions(), cameras: [camera]))
         try store.write(meta)
 
-        // So liest process_capture.py die Datei: meta["marks"], meta["name"], meta["saved"]["a"]["saved"].
+        // So liest splattwin process die Datei: meta["marks"], meta["name"], meta["saved"]["a"]["saved"].
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: store.metaURL("scan"))) as! [String: Any]
         XCTAssertEqual(json["name"] as? String, "scan")
         XCTAssertEqual((json["marks"] as? [String: Double])?["turnStart"], 17)

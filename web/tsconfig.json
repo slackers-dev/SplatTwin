@@ -1,0 +1,5 @@
+{
+  // Teilprojekte: core ohne DOM (reine Mathematik), die App im Browser, die Tests (mit Node) und die Werkzeug-Konfiguration.
+  "files": [],
+  "references": [{ "path": "./src/core" }, { "path": "./tsconfig.app.json" }, { "path": "./tsconfig.test.json" }, { "path": "./tsconfig.node.json" }]
+}

@@ -1,0 +1,43 @@
+[project]
+name = "splattwin"
+version = "0.1.0"
+description = "Splattwin: Pipeline (Video -> Gaussian Splat) und lokaler Server (Kalibrierung, Aufnahmen, Live)"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "jsonschema",
+    "fastapi>=0.162.5",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+# Gross und langsam zu installieren: nur fuer Masken (rembg) und Koerpererkennung (mediapipe).
+# Tests und Server brauchen sie nicht.
+vision = ["mediapipe", "rembg[cpu]"]
+
+[project.scripts]
+splattwin = "splattwin.cli:main"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.14.0",
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+# Kurze Namen wie R, M, K und l sind in der Geometrie gaengig.
+ignore = ["E741", "N806"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

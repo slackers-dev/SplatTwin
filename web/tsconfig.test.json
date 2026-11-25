@@ -1,0 +1,16 @@
+{
+  // Tests duerfen Node benutzen (Dateien lesen), der Code, den sie pruefen, nicht.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./.tsbuild/test",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./.tsbuild/test.tsbuildinfo",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src/**/*.test.ts"],
+  "references": [{ "path": "./src/core" }, { "path": "./tsconfig.app.json" }]
+}

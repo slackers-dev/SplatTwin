@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-splat.schema.json",
+  "title": "RunSplat",
+  "description": "data/runs/<lauf>/splat.json: bildet die Koordinaten von splat.ply (COLMAP) auf die Welt ab. Welt: Meter, y oben, Füsse bei y = 0, Person schaut nach +z. Schreiben: Pipeline (align). Lesen: Viewer, Avatar, Rig, merge-head.",
+  "type": "object",
+  "required": ["matrix", "height"],
+  "properties": {
+    "matrix": {
+      "description": "4x4, zeilenweise: matrix[zeile][spalte].",
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
+    },
+    "height": { "type": "number", "exclusiveMinimum": 0, "description": "Körpergrösse in Metern, aus der der Massstab folgt." }
+  }
+}

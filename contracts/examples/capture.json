@@ -1,0 +1,21 @@
+{
+  "name": "scan-1209",
+  "marks": {
+    "bgStart": 1.2,
+    "bgEnd": 4.8,
+    "turnStart": 8.1,
+    "turnedDegrees": 358,
+    "turnEnd": 26.4
+  },
+  "offset": 0,
+  "saved": {
+    "a": {
+      "saved": "scan-1209_a.mp4",
+      "width": 1080,
+      "height": 1920,
+      "seconds": 52.3
+    }
+  },
+  "notes": [],
+  "mime": "video/mp4;codecs=avc1.640028"
+}
