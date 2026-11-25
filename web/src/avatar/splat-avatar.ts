@@ -8,12 +8,16 @@
 //      (gleicht die anderen Proportionen aus), an den Gelenken ueberblendet.
 //   2. Jeder Klecks uebernimmt die Gewichte des naechsten Punktes auf dem Roboter.
 //   3. Pro Bild verformt Spark den Splat mit den Knochen (Dual-Quaternion-Skinning).
+// Schritte 1 und 2 dauern einige Sekunden und haengen nur vom Lauf ab: Mit upload rechnet die
+// Tracking-Seite sie einmal und speichert sie als skin.bin (skin-cache.ts), danach laden alle anderen
+// nur diese Datei.
 import { PackedSplats, SparkRenderer, SplatMesh, SplatSkinning } from '@sparkjsdev/spark';
 import * as THREE from 'three';
 import type { RunRig, RunSplat } from '../contracts';
 import { type JointName, LM } from '../core/landmarks';
 import type { Points } from './points';
 import type { Retargeter } from './retarget';
+import { decodeSkin, encodeSkin, fetchSkin, type Skin, uploadSkin } from './skin-cache';
 
 export interface SplatView {
   /** Splat statt Roboter zeigen */
@@ -30,11 +34,17 @@ export interface SplatAvatar {
   /** Teilweise Aenderung, z. B. setView({ robotOpacity: 0.4 }). */
   setView(change: Partial<SplatView>): void;
   setVisible(on: boolean): void;
+  /** Splat entfernen (z. B. anderer Lauf), der Roboter ist danach wieder sichtbar. */
+  dispose(): void;
 }
 
 export interface SplatAvatarOptions {
   /** Jeden Koerperteil einfaerben, um die Zuteilung der Kleckse zu pruefen. */
   debugParts?: boolean;
+  /** Fehlt skin.bin, nach dem Rechnen hochladen (Tracking-Seite: Presenter und dieser Rechner). */
+  upload?: boolean;
+  /** skin.bin nicht benutzen (passt nicht zum Modell): neu rechnen. */
+  noSkin?: boolean;
 }
 
 /** Ein Koerperteil: Knochen, Strecke in der Person (a, b), dieselbe Strecke im Roboter (ax, bx),
@@ -94,12 +104,19 @@ export async function loadSplatAvatar(
   renderer: THREE.WebGLRenderer,
   retargeter: Retargeter,
   run: string,
-  { debugParts = false }: SplatAvatarOptions = {},
+  options: SplatAvatarOptions = {},
 ): Promise<SplatAvatar> {
+  const { debugParts = false, upload = false, noSkin = false } = options;
   const base = runUrl(run);
   const [pose, rig] = await Promise.all([getJson<RunSplat>(base, 'splat.json', run), getJson<RunRig>(base, 'rig.json', run)]);
-  const source = new PackedSplats({ url: base + 'splat.ply' });
-  await source.initialized;
+  // Alles Laden vor der Bindehaltung: danach laeuft alles ohne await durch, sodass neue Tracking-Bilder
+  // das Skelett nicht mitten in der Rechnung verstellen (auf der Buehne laeuft das Tracking schon).
+  const skinBuf = debugParts || noSkin ? null : await fetchSkin(base);
+  let source: PackedSplats | null = null;
+  if (!skinBuf) {
+    source = new PackedSplats({ url: base + 'splat.ply' });
+    await source.initialized;
+  }
 
   // Gelenke der Person (S) und des Roboters in Ruhepose (X), beide in Metern,
   // y nach oben, Blick nach +z.
@@ -171,103 +188,98 @@ export async function loadSplatAvatar(
     }
   }
 
-  // Jeden Klecks aufrichten (splat.json) und dem naechsten Koerperteil zuteilen.
-  const pos = new THREE.Vector3(),
-    rot = new THREE.Quaternion(),
-    scl = new THREE.Vector3();
-  new THREE.Matrix4().set(...(pose.matrix.flat() as Parameters<THREE.Matrix4['set']>)).decompose(pos, rot, scl);
-  const upright = new THREE.Matrix4().compose(pos, rot, scl);
-  // Nachbarn: das Teil, dessen Knochen im Skelett als naechster darueber liegt, und umgekehrt.
-  const byBone = new Map<THREE.Object3D, Part>(parts.map((p) => [p.bone, p]));
-  for (const p of parts) {
-    let up = p.bone.parent;
-    while (up && !byBone.has(up)) up = up.parent;
-    const above = up ? byBone.get(up) : undefined;
-    if (above) {
-      p.neighbours.push(above);
-      above.neighbours.push(p);
-    }
-  }
-  const halfShoulders = (S.lSh.distanceTo(S.rSh) / 2) * 1.05;
-  source.forEachSplat((_i, center, scales, quaternion, opacity, color) => {
-    const c = center.clone().applyMatrix4(upright);
-    let best = parts[0]!,
-      bestD = Infinity;
-    const dist = new Map<Part, number>();
+  /** 1. Kleckse den Koerperteilen zuteilen und auf den Roboter legen. */
+  const assignParts = (src: PackedSplats): Blob[] => {
+    // Jeden Klecks aufrichten (splat.json) und dem naechsten Koerperteil zuteilen.
+    const pos = new THREE.Vector3(),
+      rot = new THREE.Quaternion(),
+      scl = new THREE.Vector3();
+    new THREE.Matrix4().set(...(pose.matrix.flat() as Parameters<THREE.Matrix4['set']>)).decompose(pos, rot, scl);
+    const upright = new THREE.Matrix4().compose(pos, rot, scl);
+    // Nachbarn: das Teil, dessen Knochen im Skelett als naechster darueber liegt, und umgekehrt.
+    const byBone = new Map<THREE.Object3D, Part>(parts.map((p) => [p.bone, p]));
     for (const p of parts) {
-      // Was seitlich ueber die Schultern hinausragt, ist Arm und nie Rumpf.
-      if (p.torso && Math.abs(c.x - shS.x) > halfShoulders) continue;
-      const d = segmentDistance(c, p.a, p.b, p.t0, p.t1) / p.r;
-      dist.set(p, d);
-      if (d < bestD) {
-        bestD = d;
-        best = p;
+      let up = p.bone.parent;
+      while (up && !byBone.has(up)) up = up.parent;
+      const above = up ? byBone.get(up) : undefined;
+      if (above) {
+        p.neighbours.push(above);
+        above.neighbours.push(p);
       }
     }
-    // Naechster Nachbar im Skelett: nahe an der Grenze wird zwischen beiden Teilen
-    // ueberblendet, damit an Schulter, Ellbogen, Hueftgelenk und Knie nichts aufreisst.
-    let near: Part | null = null,
-      nearD = Infinity;
-    for (const other of best.neighbours) {
-      const d = dist.get(other);
-      if (d !== undefined && d < nearD) {
-        nearD = d;
-        near = other;
+    const halfShoulders = (S.lSh.distanceTo(S.rSh) / 2) * 1.05;
+    src.forEachSplat((_i, center, scales, quaternion, opacity, color) => {
+      const c = center.clone().applyMatrix4(upright);
+      let best = parts[0]!,
+        bestD = Infinity;
+      const dist = new Map<Part, number>();
+      for (const p of parts) {
+        // Was seitlich ueber die Schultern hinausragt, ist Arm und nie Rumpf.
+        if (p.torso && Math.abs(c.x - shS.x) > halfShoulders) continue;
+        const d = segmentDistance(c, p.a, p.b, p.t0, p.t1) / p.r;
+        dist.set(p, d);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
       }
-    }
-    const weight = near ? 1 / (1 + Math.exp(-(nearD - bestD) / 0.25)) : 1;
-    const col = debugParts ? new THREE.Color().setHSL((parts.indexOf(best) * 0.31) % 1, 0.9, 0.5) : color.clone();
-    best.splats.push({ c, s: scales.clone().multiplyScalar(scl.x), q: quaternion.clone().premultiply(rot), o: opacity, col, near, weight });
-  });
+      // Naechster Nachbar im Skelett: nahe an der Grenze wird zwischen beiden Teilen
+      // ueberblendet, damit an Schulter, Ellbogen, Hueftgelenk und Knie nichts aufreisst.
+      let near: Part | null = null,
+        nearD = Infinity;
+      for (const other of best.neighbours) {
+        const d = dist.get(other);
+        if (d !== undefined && d < nearD) {
+          nearD = d;
+          near = other;
+        }
+      }
+      const weight = near ? 1 / (1 + Math.exp(-(nearD - bestD) / 0.25)) : 1;
+      const col = debugParts ? new THREE.Color().setHSL((parts.indexOf(best) * 0.31) % 1, 0.9, 0.5) : color.clone();
+      best.splats.push({ c, s: scales.clone().multiplyScalar(scl.x), q: quaternion.clone().premultiply(rot), o: opacity, col, near, weight });
+    });
 
-  // 1. Jeden Koerperteil in die Ruhepose des Roboters legen.
-  for (const p of parts) {
-    const dS = p.b.clone().sub(p.a),
-      dX = p.bx.clone().sub(p.ax);
-    p.q = new THREE.Quaternion().setFromUnitVectors(dS.clone().normalize(), dX.clone().normalize());
-    p.k = dX.length() / dS.length();
-  }
-  const all: Blob[] = [];
-  for (const p of parts) {
-    for (const g of p.splats) {
-      const here = place(p, g.c),
-        turn = p.q.clone();
-      let k = p.k;
-      if (g.near && g.weight < 0.98) {
-        here.lerp(place(g.near, g.c), 1 - g.weight);
-        turn.slerp(g.near.q, 1 - g.weight);
-        k = k * g.weight + g.near.k * (1 - g.weight);
-      }
-      g.c = here;
-      g.q.premultiply(turn);
-      g.s.multiplyScalar(k);
-      all.push(g);
+    // 1. Jeden Koerperteil in die Ruhepose des Roboters legen.
+    for (const p of parts) {
+      const dS = p.b.clone().sub(p.a),
+        dX = p.bx.clone().sub(p.ax);
+      p.q = new THREE.Quaternion().setFromUnitVectors(dS.clone().normalize(), dX.clone().normalize());
+      p.k = dX.length() / dS.length();
     }
-  }
+    const all: Blob[] = [];
+    for (const p of parts) {
+      for (const g of p.splats) {
+        const here = place(p, g.c),
+          turn = p.q.clone();
+        let k = p.k;
+        if (g.near && g.weight < 0.98) {
+          here.lerp(place(g.near, g.c), 1 - g.weight);
+          turn.slerp(g.near.q, 1 - g.weight);
+          k = k * g.weight + g.near.k * (1 - g.weight);
+        }
+        g.c = here;
+        g.q.premultiply(turn);
+        g.s.multiplyScalar(k);
+        all.push(g);
+      }
+    }
+    return all;
+  };
 
-  // 2. Gewichte vom naechsten Punkt der Roboter-Oberflaeche uebernehmen.
+  // Knochen des Roboters in der Bindehaltung: an ihnen haengt der Splat.
   const robot: THREE.SkinnedMesh[] = [];
   retargeter.model.traverse((o) => {
     if ((o as THREE.SkinnedMesh).isSkinnedMesh) robot.push(o as THREE.SkinnedMesh);
   });
   const bones: THREE.Bone[] = [],
     boneIndex = new Map<THREE.Bone, number>();
-  const verts: { mesh: THREE.SkinnedMesh; i: number }[] = [];
-  const xyzList: number[] = [];
-  const v = new THREE.Vector3();
-  for (const mesh of robot) {
-    mesh.skeleton.update();
-    for (const bone of mesh.skeleton.bones) {
+  for (const m of robot) {
+    m.skeleton.update();
+    for (const bone of m.skeleton.bones) {
       if (!boneIndex.has(bone)) {
         boneIndex.set(bone, bones.length);
         bones.push(bone);
       }
-    }
-    const n = mesh.geometry.attributes.position!.count;
-    for (let i = 0; i < n; i++) {
-      mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld);
-      verts.push({ mesh, i });
-      xyzList.push(v.x, v.y, v.z);
     }
   }
   // Bindehaltung der Knochen jetzt festhalten: das Tracking darf sie danach schon bewegen.
@@ -275,7 +287,59 @@ export async function loadSplatAvatar(
     q: bone.getWorldQuaternion(new THREE.Quaternion()).invert(),
     p: bone.getWorldPosition(new THREE.Vector3()),
   }));
-  const xyz = new Float32Array(xyzList);
+
+  /** 2. Gewichte vom naechsten Punkt der Roboter-Oberflaeche uebernehmen. */
+  const computeSkin = (src: PackedSplats): Skin => {
+    const all = assignParts(src);
+    const verts: { mesh: THREE.SkinnedMesh; i: number }[] = [];
+    const xyzList: number[] = [];
+    const v = new THREE.Vector3();
+    for (const m of robot) {
+      const n = m.geometry.attributes.position!.count;
+      for (let i = 0; i < n; i++) {
+        m.getVertexPosition(i, v).applyMatrix4(m.matrixWorld);
+        verts.push({ mesh: m, i });
+        xyzList.push(v.x, v.y, v.z);
+      }
+    }
+    const xyz = new Float32Array(xyzList);
+    const idx = new Uint8Array(all.length * 4),
+      w = new Uint8Array(all.length * 4);
+    const si = new THREE.Vector4(),
+      sw = new THREE.Vector4();
+    all.forEach((g, n) => {
+      let best = 0,
+        bestD = Infinity;
+      for (let i = 0; i < xyz.length; i += 3) {
+        const dx = xyz[i]! - g.c.x,
+          dy = xyz[i + 1]! - g.c.y,
+          dz = xyz[i + 2]! - g.c.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < bestD) {
+          bestD = d;
+          best = i / 3;
+        }
+      }
+      const { mesh: src, i } = verts[best]!;
+      si.fromBufferAttribute(src.geometry.attributes.skinIndex as THREE.BufferAttribute, i);
+      sw.fromBufferAttribute(src.geometry.attributes.skinWeight as THREE.BufferAttribute, i);
+      sw.divideScalar(sw.x + sw.y + sw.z + sw.w);
+      (['x', 'y', 'z', 'w'] as const).forEach((c, k) => {
+        idx[n * 4 + k] = boneIndex.get(src.skeleton.bones[si[c]]!)!;
+        w[n * 4 + k] = Math.round(sw[c] * 255);
+      });
+    });
+    return { splats: all, idx, w };
+  };
+
+  let skin = skinBuf ? decodeSkin(skinBuf, retargeter.model, bones) : null;
+  if (!skin) {
+    // skin.bin passt nicht zum Modell (selten): ohne neu laden und rechnen.
+    if (!source) return loadSplatAvatar(scene, renderer, retargeter, run, { ...options, noSkin: true });
+    skin = computeSkin(source);
+    if (upload && !debugParts) uploadSkin(run, encodeSkin(skin, retargeter.model, bones));
+  }
+  const { splats, idx: boneIdx, w: boneW } = skin;
 
   const dq = new THREE.Quaternion(),
     t = new THREE.Vector3(),
@@ -296,39 +360,26 @@ export async function loadSplatAvatar(
 
   const mesh = new SplatMesh({
     constructSplats: (out) => {
-      for (const g of all) out.pushSplat(g.c, g.s, g.q, g.o, g.col);
+      for (const g of splats) out.pushSplat(g.c, g.s, g.q, g.o, g.col);
     },
     onFrame: () => updateBones(),
   });
   await mesh.initialized;
-  skinning = new SplatSkinning({ mesh, numSplats: all.length, numBones: bones.length });
+  skinning = new SplatSkinning({ mesh, numSplats: splats.length, numBones: bones.length });
   const idx = new THREE.Vector4(),
     w = new THREE.Vector4();
-  all.forEach((g, n) => {
-    let best = 0,
-      bestD = Infinity;
-    for (let i = 0; i < xyz.length; i += 3) {
-      const dx = xyz[i]! - g.c.x,
-        dy = xyz[i + 1]! - g.c.y,
-        dz = xyz[i + 2]! - g.c.z;
-      const d = dx * dx + dy * dy + dz * dz;
-      if (d < bestD) {
-        bestD = d;
-        best = i / 3;
-      }
-    }
-    const { mesh: src, i } = verts[best]!;
-    idx.fromBufferAttribute(src.geometry.attributes.skinIndex as THREE.BufferAttribute, i);
-    w.fromBufferAttribute(src.geometry.attributes.skinWeight as THREE.BufferAttribute, i);
-    for (const c of ['x', 'y', 'z', 'w'] as const) idx[c] = boneIndex.get(src.skeleton.bones[idx[c]]!)!;
-    skinning!.setSplatBones(n, idx, w.divideScalar(w.x + w.y + w.z + w.w));
-  });
+  for (let n = 0; n < splats.length; n++) {
+    idx.fromArray(boneIdx, n * 4);
+    w.fromArray(boneW, n * 4);
+    skinning.setSplatBones(n, idx, w.divideScalar(Math.max(1, w.x + w.y + w.z + w.w)));
+  }
   skinning.skinTexture.needsUpdate = true;
   bones.forEach((_, i) => skinning!.setRestQuatPos(i, new THREE.Quaternion(), new THREE.Vector3()));
 
   mesh.skinning = skinning;
   mesh.updateGenerator();
-  scene.add(new SparkRenderer({ renderer }));
+  // Ein SparkRenderer pro Szene reicht, auch fuer mehrere Splats (Buehne mit zwei Presentern).
+  if (!scene.children.some((o) => o instanceof SparkRenderer)) scene.add(new SparkRenderer({ renderer }));
   scene.add(mesh);
 
   // Ansicht: Splat oder Roboter, oder beide uebereinander, um die Zuordnung zu pruefen.
@@ -361,5 +412,14 @@ export async function loadSplatAvatar(
     Object.assign(view, change);
     applyView();
   };
-  return { count: all.length, setView, setVisible: (on) => setView({ splat: on }) };
+  return {
+    count: splats.length,
+    setView,
+    setVisible: (on) => setView({ splat: on }),
+    dispose: () => {
+      setView({ splat: false });
+      scene.remove(mesh);
+      mesh.dispose();
+    },
+  };
 }

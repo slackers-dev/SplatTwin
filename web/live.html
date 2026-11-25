@@ -3,15 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Splattwin – Zuschauen</title>
+<title>Splattwin – Bühne</title>
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 </head>
 <body>
 <canvas id="scene"></canvas>
-<div id="panel">
-  <h1>Splattwin · Zuschauen</h1>
-  <p id="status">lade …</p>
-  <label><input id="splat" type="checkbox" checked disabled> Splat statt Roboter</label>
+<div id="top">
+  <div id="brand" class="panel">
+    <img src="/logo.svg" alt="">
+    <div><h1>SplatTwin · Live-Präsentation</h1><p id="status">lade …</p></div>
+  </div>
+  <div id="people">
+    <span id="chipA" class="chip A panel">Platz A</span>
+    <span id="chipB" class="chip B panel">Platz B</span>
+  </div>
+</div>
+<div id="big" hidden><canvas id="bigCanvas"></canvas></div>
+<div id="bar" class="panel" role="toolbar" aria-label="Ansicht">
+  <button data-view="publikum" aria-pressed="true" title="Taste 1">Publikum</button>
+  <button data-view="buehne" aria-pressed="false" title="Taste 2">Bühne</button>
+  <button data-view="folie" aria-pressed="false" title="Taste 3">Folie</button>
+  <button data-view="A" aria-pressed="false" title="Taste 4">A</button>
+  <button data-view="B" aria-pressed="false" title="Taste 5">B</button>
+  <span class="sep"></span>
+  <button id="btnSplat" aria-pressed="true" title="Taste S">Splat</button>
+  <button id="btnBig" aria-pressed="false" title="Taste F">Folie gross</button>
+  <span id="page">–</span>
 </div>
 <script type="module" src="/src/pages/live/main.ts"></script>
 </body>

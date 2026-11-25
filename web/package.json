@@ -18,6 +18,7 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.14",
     "@sparkjsdev/spark": "2.4.0",
+    "pdfjs-dist": "^4.4.168",
     "three": "0.180.0"
   },
   "devDependencies": {

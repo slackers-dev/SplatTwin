@@ -41,8 +41,13 @@
   <div class="row"><button id="btnCenter">Position zurücksetzen</button></div>
 
   <h2>Live senden</h2>
-  <label class="check"><input id="live" type="checkbox"> Avatar an Zuschauer senden <span id="liveInfo" class="dim"></span></label>
+  <label class="check"><input id="live" type="checkbox"> Auf die Bühne senden <span id="liveInfo" class="dim"></span></label>
   <p id="liveLinks" class="links"></p>
+  <div class="fov">
+    <label>Bühnenplatz<select id="liveSlot"><option value="A">A (links)</option><option value="B">B (rechts)</option></select></label>
+    <label>Name<input id="liveName" maxlength="24" placeholder="z. B. Kev"></label>
+  </div>
+  <label class="check"><input id="liveLite" type="checkbox" checked> Sparmodus beim Senden (Vorschau hier nur 15 Bilder/s)</label>
 
   <h2>Zweite Kamera (Stereo)</h2>
   <select id="cameraB" hidden></select>

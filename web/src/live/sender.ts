@@ -1,55 +1,95 @@
-// Schickt pro Bild, was der Avatar bekommt, an den Server; Zuschauerseiten bauen daraus denselben
-// Avatar nach. Nur Punkte, kein Bild: ein paar Kilobyte pro Bild.
-import type { LiveFrame, Point } from '../contracts';
-import type { Hands } from '../core/hands';
-import type { Vec3 } from '../core/vec';
+// Schickt pro Bild, was der Avatar bekommt, ueber einen WebSocket an den Server (/ws/send); Buehne
+// und Regie bauen daraus denselben Avatar nach. Nur Punkte, kein Bild, im Binaerformat aus
+// protocol.ts: 110 bis 360 Bytes pro Bild. Kommt das Netz nicht nach, wird ein Bild ausgelassen statt
+// gestaut, damit die Verzoegerung nicht waechst. Name und Lauf (contracts/stage-meta) gehen nur bei
+// Aenderung mit.
+import type { StageMeta } from '../contracts';
+import { encodeFrame, type FrameInput, type Slot } from './protocol';
+import { wsUrl } from './receiver';
 
-const round = (p: Vec3 | null | undefined): Point => (p ? [+p[0].toFixed(4), +p[1].toFixed(4), +p[2].toFixed(4)] : null);
-
-export interface LiveState {
-  run: string;
-  upper: boolean;
-  mirror: boolean;
-  /** Position des Avatars am Boden [x, z] */
-  pos: [number, number];
-  pts: (Vec3 | null)[];
-  hands: Hands<Vec3[]>;
-}
-
-export function liveFrame(s: LiveState): LiveFrame {
-  return {
-    t: Math.round(performance.now()),
-    run: s.run,
-    upper: s.upper,
-    mirror: s.mirror,
-    pos: [+s.pos[0].toFixed(4), +s.pos[1].toFixed(4)],
-    pts: s.pts.map(round),
-    hands: { Left: s.hands.Left?.map(round) ?? null, Right: s.hands.Right?.map(round) ?? null },
-  };
-}
+/** Mehr ungesendete Bytes als das: das Netz kommt nicht nach, dieses Bild auslassen. */
+const BACKLOG = 2048;
 
 export interface LiveInfo {
   lan: boolean;
-  /** Adressen fuer Geraete im WLAN, leer ohne --lan */
+  /** Adressen der Buehne fuer Geraete im WLAN, leer ohne --lan */
   urls: string[];
   viewers: number;
+  /** darf senden (dieser Rechner oder eingeloggt) */
+  presenter: boolean;
+  /** Platz des eingeloggten Presenters, null = frei waehlbar (dieser Rechner) */
+  slot: Slot | null;
+  /** nur auf diesem Rechner: Adresse fuer den Presenter-Login zum Testen */
+  presenterUrl?: string;
 }
 
 export const fetchLiveInfo = async (): Promise<LiveInfo> => (await fetch('/api/info')).json() as Promise<LiveInfo>;
 
 export class LiveSender {
-  private busy = false;
+  private socket: WebSocket | null = null;
+  private meta = '';
+  private slot: Slot = 'A';
+  private wanted = false;
+  /** ausgelassene Bilder seit dem Start */
+  skipped = 0;
 
-  /** Sendet, falls der Server mit dem letzten Bild fertig ist (sonst wird dieses ausgelassen). */
-  send(frame: LiveFrame, onResult: (viewers: number | null) => void): void {
-    if (this.busy) return;
-    this.busy = true;
-    fetch('/api/live', { method: 'POST', body: JSON.stringify(frame) })
-      .then((r) => r.json() as Promise<{ viewers: number }>)
-      .then((r) => onResult(r.viewers))
-      .catch(() => onResult(null))
-      .finally(() => {
-        this.busy = false;
-      });
+  /** status: Text fuer die Seite, z. B. «3 verbunden» oder «verbinde …». */
+  constructor(private readonly status: (text: string) => void) {}
+
+  start(slot: Slot): void {
+    this.wanted = true;
+    this.slot = slot;
+    this.skipped = 0;
+    this.connect();
+  }
+
+  stop(): void {
+    this.wanted = false;
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
+  }
+
+  /** Anderer Platz: neu verbinden (eingeloggte Presenter haben ihren Platz fest, der Server entscheidet). */
+  setSlot(slot: Slot): void {
+    this.slot = slot;
+    if (this.wanted) {
+      this.stop();
+      this.start(slot);
+    }
+  }
+
+  send(frame: FrameInput, meta: StageMeta): void {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (socket.bufferedAmount > BACKLOG) {
+      this.skipped++;
+      return;
+    }
+    const text = JSON.stringify(meta);
+    if (text !== this.meta) {
+      socket.send(text);
+      this.meta = text;
+    }
+    socket.send(encodeFrame(frame));
+  }
+
+  private connect(): void {
+    if (!this.wanted || (this.socket && this.socket.readyState <= WebSocket.OPEN)) return;
+    const socket = new WebSocket(wsUrl(`/ws/send?slot=${this.slot}`));
+    this.socket = socket;
+    this.meta = '';
+    this.status('verbinde …');
+    socket.onmessage = (e: MessageEvent<string>) => {
+      const msg = JSON.parse(e.data) as { type: string; viewers?: number };
+      if (msg.type === 'info') this.status(`${msg.viewers} verbunden` + (this.skipped ? ` · ${this.skipped} Bilder ausgelassen` : ''));
+    };
+    socket.onclose = (e) => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      if (!this.wanted) return;
+      this.status(e.code === 1008 ? 'nicht eingeloggt: über present.<Adresse> anmelden' : 'Verbindung weg, verbinde neu …');
+      setTimeout(() => this.connect(), e.code === 1008 ? 5000 : 1000);
+    };
   }
 }
