@@ -1,17 +1,22 @@
+# Arbeitsbereich (uv workspace) im Projektordner: eine gemeinsame .venv fuer alles, was Python braucht.
+# Das eigentliche Paket liegt in python/ (splattwin: Pipeline und Server).
 [project]
-name = "splattwin"
+name = "splattwin-workspace"
 version = "0.1.0"
 description = "Person als Gaussian Splat aufnehmen und live per Kamera-Tracking bewegen (Modul CVAI)"
 readme = "README.md"
 # mediapipe gibt es nur bis Python 3.12
 requires-python = ">=3.10,<3.13"
-dependencies = [
-    "numpy",
-    "opencv-python-headless",
-    "mediapipe",
-    "rembg[cpu]",
-]
+dependencies = ["splattwin[vision]"]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
 
 [tool.uv]
-# Kein installierbares Paket, nur eine Umgebung fuer server.py und die Skripte in splat/.
 package = false
+
+[tool.uv.sources]
+splattwin = { workspace = true }
+
+[tool.uv.workspace]
+members = ["python"]
