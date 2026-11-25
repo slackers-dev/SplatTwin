@@ -14,7 +14,9 @@ Wahrheit:**
 | `run-splat.schema.json` | `data/runs/<lauf>/splat.json` | Pipeline (Ausrichtung) | Viewer, Avatar, Rig |
 | `run-rig.schema.json` | `data/runs/<lauf>/rig.json` | Pipeline (Rig) | Splat-Avatar |
 | `intrinsics.schema.json` | `POST /api/calibrate`, App-Kameras | Server, App-Brücke | Tracking |
-| `live-frame.schema.json` | `POST /api/live`, `GET /api/live` (SSE) | Tracking-Seite | Zuschauerseite |
+| `live-frame.schema.json` | `/ws/send`, `/ws/stage`, binär (`web/src/live/protocol.ts`) | Tracking-Seite | Bühne, Regie |
+| `stage-meta.schema.json` | `/ws/send`, `/ws/stage`, `data/stage/seats.json` | Tracking-Seite | Bühne, Regie |
+| `stage-slides.schema.json` | `/ws/stage`, `data/stage/slides.json` | Server (nach Upload, Regie) | Bühne, Regie |
 
 Die Schemas beschreiben die Formate so, wie sie heute geschrieben werden. Die Mac-App schreibt
 `capture.json` selbst (`CaptureMeta` in `app/Kit/Sources/SplattwinKit/CaptureStore.swift`), dort müssen
@@ -27,6 +29,7 @@ data/runs/<lauf>/
   splat.ply          Gaussian Splat in COLMAP-Koordinaten (wie Brush ihn schreibt)
   splat.json         Ausrichtung COLMAP -> Welt                     (run-splat)
   rig.json           Gelenke der Person in Weltkoordinaten          (run-rig)
+  skin.bin           Splat schon aufs Skelett gelegt, von der Tracking-Seite vorgerechnet (web/src/avatar/skin-cache.ts)
   splat_koerper.ply  Körper-Splat vor dem Aufsetzen des Kopfs (nur nach merge-head)
   head.json          Bericht von merge-head (nicht Teil des Vertrags)
   masken_check.jpg, rig_check.jpg   Kontrollbilder

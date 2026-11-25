@@ -1,20 +1,23 @@
-// Zuschauerseite: zeigt den Avatar, den die Tracking-Seite («Live senden») bewegt.
+// Buehne (Zuschauerseite): zwei Presenter und die Folien in einem 3D-Raum, live fuer alle.
 //
-// Keine Kamera und keine Erkennung: Die Seite empfaengt pro Bild die Gelenkpunkte vom Server
-// (Server-Sent Events) und gibt sie demselben Retargeter wie die Tracking-Seite. Laeuft auch auf
-// Handy oder Tablet im selben WLAN (splattwin serve --lan).
-//
-// ?run=<lauf> waehlt den Splat; ohne Angabe wird der Lauf der Tracking-Seite genommen.
+// Keine Kamera, keine Erkennung: Die Seite empfaengt ueber /ws/stage den Folienstand, Name und Lauf
+// je Platz und die Bilder der Tracking-Seiten (src/live). Die Presenter stehen als Splat oder Roboter
+// auf der Buehne (avatar/presenter), die Folien haengen als Leinwand an der Rueckwand (slides).
+// Laeuft auch auf Handy oder Tablet; ?q=hoch oder ?q=niedrig erzwingt eine Qualitaetsstufe,
+// ?splat=0 zeigt nur die Roboter.
 import './style.css';
-import { toVectors } from '../../avatar/points';
-import { loadRobot } from '../../avatar/robot';
-import { loadSplatAvatar } from '../../avatar/splat-avatar';
-import { createStage } from '../../avatar/stage';
-import type { LiveFrame } from '../../contracts';
-import { subscribeLive } from '../../live/receiver';
+import { Presenter } from '../../avatar/presenter';
+import { loadRobotTemplate } from '../../avatar/robot';
+import { createRoom, seatPosition, type ViewName } from '../../avatar/room';
+import type { StageSlides } from '../../contracts';
+import type { Slot } from '../../live/protocol';
+import { connectStage } from '../../live/receiver';
+import { drawPlaceholder, loadSlides, renderSlide } from '../../slides/slides';
 import { byId, params } from '../../ui/dom';
 
-const STALE_MS = 1500; // so lange ohne Bild gilt der Tracker als pausiert
+const query = params();
+const weakDevice = matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 8) <= 4;
+const quality = query.get('q');
 
 const statusEl = byId('status');
 const setStatus = (text: string, ok = false) => {
@@ -22,74 +25,120 @@ const setStatus = (text: string, ok = false) => {
   statusEl.classList.toggle('ok', ok);
 };
 
-const { renderer, scene, camera, controls } = createStage(byId<HTMLCanvasElement>('scene'));
-renderer.setAnimationLoop(() => {
-  controls.update();
-  renderer.render(scene, camera);
+const presenters: Partial<Record<Slot, Presenter>> = {};
+const room = createRoom(byId<HTMLCanvasElement>('scene'), {
+  low: quality === 'niedrig' || (quality !== 'hoch' && weakDevice),
+  autoLow: !quality,
+  presenterAt: (slot) => presenters[slot]?.position() ?? seatPosition(slot),
 });
 
-let latest: LiveFrame | null = null; // letztes empfangenes Bild, wird pro Animationsbild einmal angewendet
-let lastTime = 0;
-let frames = 0,
-  fps = 0,
-  fpsStart = performance.now();
+// ---------------------------------------------------------------- Ansichten
+const viewButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-view]')];
+const setView = (name: ViewName) => {
+  room.setView(name);
+  for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset.view === name));
+};
+for (const b of viewButtons) b.addEventListener('click', () => setView(b.dataset.view as ViewName));
 
-// Der erste Frame verraet den Lauf der Tracking-Seite, falls ?run fehlt.
-const firstFrame = new Promise<LiveFrame>((resolve) => {
-  subscribeLive(
-    (frame) => {
-      latest = frame;
-      lastTime = performance.now();
-      frames++;
-      resolve(frame);
-    },
-    () => setStatus('Verbindung zum Server unterbrochen, versuche es weiter …'),
-  );
+// ---------------------------------------------------------------- Folien
+let slides: StageSlides = { doc: null, page: 1, pages: 0 };
+let drawing = Promise.resolve();
+const big = byId('big'),
+  bigCanvas = byId<HTMLCanvasElement>('bigCanvas'),
+  btnBig = byId('btnBig');
+
+async function drawBig(): Promise<void> {
+  const width = Math.min(2400, Math.round(innerWidth * Math.min(devicePixelRatio, 2)));
+  if (slides.doc) await renderSlide(await loadSlides(slides.doc), slides.page, bigCanvas, width);
+  else drawPlaceholder(bigCanvas, 'Gleich geht es los');
+  bigCanvas.style.aspectRatio = `${bigCanvas.width} / ${bigCanvas.height}`;
+}
+
+async function drawSlide(): Promise<void> {
+  byId('page').textContent = slides.pages ? `Folie ${slides.page} / ${slides.pages}` : '–';
+  try {
+    const aspect = slides.doc
+      ? await renderSlide(await loadSlides(slides.doc), slides.page, room.screenCanvas, 2048)
+      : drawPlaceholder(room.screenCanvas, 'Gleich geht es los');
+    room.screenChanged(aspect);
+    if (!big.hidden) await drawBig();
+  } catch (err) {
+    console.error(err);
+    setStatus('Folie konnte nicht geladen werden: ' + (err as Error).message);
+  }
+}
+room.screenChanged(drawPlaceholder(room.screenCanvas, 'Gleich geht es los'));
+
+// «Folie gross»: 2D und gut lesbar, vor allem auf dem Handy.
+function toggleBig(on = big.hidden): void {
+  big.hidden = !on;
+  btnBig.setAttribute('aria-pressed', String(on));
+  if (on) void drawBig();
+}
+btnBig.addEventListener('click', () => toggleBig());
+big.addEventListener('click', () => toggleBig(false));
+
+// ---------------------------------------------------------------- Splat oder Roboter
+let splatOn = query.get('splat') !== '0';
+const btnSplat = byId('btnSplat');
+function toggleSplat(on = !splatOn): void {
+  splatOn = on;
+  btnSplat.setAttribute('aria-pressed', String(on));
+  for (const p of Object.values(presenters)) p.setSplatOn(on);
+}
+btnSplat.addEventListener('click', () => toggleSplat());
+btnSplat.setAttribute('aria-pressed', String(splatOn));
+
+addEventListener('keydown', (e) => {
+  const views: ViewName[] = ['publikum', 'buehne', 'folie', 'A', 'B'];
+  if (e.key >= '1' && e.key <= '5') setView(views[+e.key - 1]!);
+  if (e.key === 'f' || e.key === 'F') toggleBig();
+  if (e.key === 's' || e.key === 'S') toggleSplat();
+  if (e.key === 'Escape') toggleBig(false);
 });
+
+// ---------------------------------------------------------------- Start
+room.renderer.setAnimationLoop((now: number) => room.frame(now)); // Raum schon zeigen, waehrend der Roboter laedt
 
 try {
-  const retargeter = await loadRobot(scene);
-  const applyFrame = (f: LiveFrame) => {
-    retargeter.upperBodyOnly = !!f.upper;
-    retargeter.apply(toVectors(f.pts) ?? [], { Left: toVectors(f.hands?.Left), Right: toVectors(f.hands?.Right) });
-    retargeter.model.position.x = f.pos?.[0] ?? 0;
-    retargeter.model.position.z = f.pos?.[1] ?? 0;
-    document.body.classList.toggle('mirror', !!f.mirror);
-  };
-
-  setStatus('warte auf die Tracking-Seite («Live senden» einschalten) …');
-  const run = params().get('run') || (await firstFrame).run;
-
-  if (run) {
-    try {
-      setStatus(`lade Splat ${run} …`);
-      const splat = await loadSplatAvatar(scene, renderer, retargeter, run);
-      const box = byId<HTMLInputElement>('splat');
-      box.disabled = false;
-      box.addEventListener('change', () => splat.setVisible(box.checked));
-      splat.setVisible(true);
-    } catch (err) {
-      console.warn('Splat nicht geladen, zeige den Roboter:', err);
-    }
+  const template = await loadRobotTemplate();
+  for (const slot of ['A', 'B'] as const) {
+    const p = new Presenter(slot, room.scene, room.renderer, template);
+    p.setSplatOn(splatOn);
+    presenters[slot] = p;
   }
-
-  renderer.setAnimationLoop(() => {
-    const now = performance.now();
-    if (latest) {
-      applyFrame(latest);
-      latest = null;
-    }
-    if (now - fpsStart > 1000) {
-      fps = (frames * 1000) / (now - fpsStart);
-      frames = 0;
-      fpsStart = now;
-    }
-    if (now - lastTime > STALE_MS) setStatus('Tracking pausiert, warte auf neue Bilder …');
-    else setStatus(`live · ${fps.toFixed(0)} Bilder/s`, true);
-    controls.update();
-    renderer.render(scene, camera);
-  });
 } catch (err) {
   console.error(err);
-  setStatus('Fehler beim Laden: ' + (err as Error).message);
+  setStatus('Roboter konnte nicht geladen werden: ' + (err as Error).message);
 }
+
+let connected = false;
+connectStage({
+  open: () => (connected = true),
+  close: () => (connected = false),
+  slides: (state) => {
+    slides = state;
+    drawing = drawing.then(drawSlide);
+  },
+  // Name und Lauf kommen schon beim Verbinden: der Splat laedt, bevor der Presenter sendet.
+  meta: (slot, meta) => presenters[slot]?.setMeta(meta),
+  frame: (slot, frame) => presenters[slot]?.receive(frame, performance.now()),
+});
+
+room.renderer.setAnimationLoop((now: number) => {
+  const list = Object.values(presenters);
+  for (const p of list) {
+    p.update(now);
+    const chip = byId('chip' + p.slot);
+    chip.classList.toggle('on', p.online);
+    // Bilder pro Sekunde je Presenter: zeigt sofort, wenn eine Tracking-Seite bremst.
+    chip.textContent = `${p.slot} · ${p.name || (p.online ? 'live' : 'frei')}` + (p.online ? ` · ${p.rate} B/s` : '');
+  }
+  const live = list.filter((p) => p.online).length;
+  const loading = list.find((p) => p.loading);
+  const suffix = loading ? ` · lade Splat ${loading.slot} …` : '';
+  if (!connected) setStatus('Verbindung unterbrochen, versuche es weiter …');
+  else if (live) setStatus(`live · ${live === 2 ? 'beide Presenter' : '1 Presenter'} auf der Bühne${suffix}`, true);
+  else setStatus('verbunden · warte auf die Presenter …' + suffix);
+  room.frame(now);
+});

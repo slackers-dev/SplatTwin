@@ -30,7 +30,7 @@ export default defineConfig(
     files: ['src/core/**/*.ts', 'src/contracts/**/*.ts'],
     rules: restrict(
       [['three', 'three/*', '@mediapipe/*', '@sparkjsdev/*'], 'core ist reine Mathematik ohne Bibliotheken.'],
-      [['**/tracking/**', '**/avatar/**', '**/capture/**', '**/live/**', '**/ui/**', '**/pages/**'], 'core haengt von nichts ausser contracts ab.'],
+      [['**/tracking/**', '**/avatar/**', '**/capture/**', '**/live/**', '**/slides/**', '**/ui/**', '**/pages/**'], 'core haengt von nichts ausser contracts ab.'],
     ),
   },
   {
@@ -45,7 +45,7 @@ export default defineConfig(
     rules: restrict([['@mediapipe/*', '**/tracking/**', '**/capture/**'], 'avatar kennt das Tracking nicht.'], PAGES),
   },
   {
-    files: ['src/capture/**/*.ts', 'src/live/**/*.ts', 'src/ui/**/*.ts'],
+    files: ['src/capture/**/*.ts', 'src/live/**/*.ts', 'src/slides/**/*.ts', 'src/ui/**/*.ts'],
     rules: restrict([['three', 'three/*', '@sparkjsdev/*', '**/avatar/**'], 'Ohne three.js: das ist Sache von avatar.'], PAGES),
   },
 );

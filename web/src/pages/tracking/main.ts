@@ -14,7 +14,8 @@ import { DebugSkeleton } from '../../avatar/skeleton';
 import { loadSplatAvatar } from '../../avatar/splat-avatar';
 import { createStage } from '../../avatar/stage';
 import type { Intrinsics } from '../../contracts';
-import { fetchLiveInfo, liveFrame, LiveSender } from '../../live/sender';
+import type { Slot } from '../../live/protocol';
+import { fetchLiveInfo, LiveSender } from '../../live/sender';
 import { appStream, bridgeBaseline, installAppBridge } from '../../tracking/app-bridge';
 import { type CamId, CAMS, CameraSetup } from '../../tracking/cameras';
 import { createHandLandmarker, createPoseLandmarker } from '../../tracking/detectors';
@@ -23,6 +24,7 @@ import { clearStereo, loadStereo, type SavedStereo, saveStereo } from '../../tra
 import { type TrackFrame, Tracker, type TrackSettings } from '../../tracking/tracker';
 import { deviceIdOf, listVideoInputs, openCamera, openFile } from '../../tracking/video';
 import { byId, params } from '../../ui/dom';
+import { loadJson, saveJson } from '../../ui/storage';
 import { ChessboardCalibration } from './chessboard';
 
 // Kameras der Splattwin-App (app/) als normale Kameras anbieten; ohne laufende App ohne Wirkung.
@@ -53,6 +55,9 @@ const ui = {
   live: input('live'),
   liveInfo: byId('liveInfo'),
   liveLinks: byId('liveLinks'),
+  liveSlot: byId<HTMLSelectElement>('liveSlot'),
+  liveName: input('liveName'),
+  liveLite: input('liveLite'),
   fov: { A: input('fovA'), B: input('fovB') } as Record<CamId, HTMLInputElement>,
   stereoStatus: byId('stereoStatus'),
   intrStatus: byId('intrStatus'),
@@ -290,18 +295,44 @@ showSliders();
 const settings = (): TrackSettings => ({ sigmaA: +ui.sigmaA.value, sigmaZ: +ui.sigmaZ.value / 100, fingers: ui.fingers.checked });
 
 // ---------------------------------------------------------------- Live senden
-const sender = new LiveSender();
+// Auf die Buehne (live.html): Platz A oder B, Name und Sparmodus werden gemerkt. Wer ueber
+// present.<Adresse> eingeloggt ist, hat seinen Platz fest (der Server entscheidet).
+const STAGE_KEY = 'splattwin.stage';
+const saved = loadJson<{ slot: Slot; name: string; lite: boolean }>(STAGE_KEY);
+if (saved) {
+  ui.liveSlot.value = saved.slot;
+  ui.liveName.value = saved.name;
+  ui.liveLite.checked = saved.lite;
+}
+const saveStage = () => saveJson(STAGE_KEY, { slot: ui.liveSlot.value, name: ui.liveName.value, lite: ui.liveLite.checked });
+for (const el of [ui.liveSlot, ui.liveName, ui.liveLite]) el.addEventListener('change', saveStage);
+
+const sender = new LiveSender((text) => (ui.liveInfo.textContent = text));
+const link = (href: string, text: string) => Object.assign(document.createElement('a'), { href, textContent: text, target: '_blank' });
+fetchLiveInfo()
+  .then((info) => {
+    if (info.slot) {
+      ui.liveSlot.value = info.slot;
+      ui.liveSlot.disabled = true;
+    }
+  })
+  .catch(() => {});
+ui.liveSlot.addEventListener('change', () => sender.setSlot(ui.liveSlot.value as Slot));
 ui.live.addEventListener('change', async () => {
   ui.liveInfo.textContent = '';
   ui.liveLinks.textContent = '';
-  if (!ui.live.checked) return;
+  if (!ui.live.checked) {
+    sender.stop();
+    return;
+  }
+  sender.start(ui.liveSlot.value as Slot);
   try {
     const info = await fetchLiveInfo();
-    const link = (href: string, text: string) => Object.assign(document.createElement('a'), { href, textContent: text, target: '_blank' });
     ui.liveLinks.replaceChildren(
-      ...(info.urls.length
-        ? info.urls.map((url) => link(url, url))
-        : [link('/live.html', 'Zuschauen (nur dieser Rechner)'), document.createTextNode(' · für andere Geräte im WLAN den Server mit --lan starten')]),
+      ...(info.urls.length ? info.urls.map((url) => link(url, url)) : [link('/live.html', 'Bühne (nur dieser Rechner)')]),
+      link('/control.html', 'Regie: Folien hochladen und umschalten'),
+      document.createTextNode(info.presenterUrl ? `Presenter-Login zum Testen: ${info.presenterUrl}` : ''),
+      document.createTextNode(info.urls.length || info.slot ? '' : ' · für andere Geräte im WLAN den Server mit --lan starten'),
     );
   } catch {
     ui.liveInfo.textContent = 'Server nicht erreichbar';
@@ -344,8 +375,8 @@ function apply(f: TrackFrame): void {
     }
     if (ui.live.checked) {
       sender.send(
-        liveFrame({ run: RUN, upper: ui.upper.checked, mirror: ui.mirror.checked, pos: [pos.x, pos.z], pts, hands }),
-        (viewers) => (ui.liveInfo.textContent = viewers === null ? 'Server nicht erreichbar' : `${viewers} Zuschauer`),
+        { t: performance.now(), upper: ui.upper.checked, mirror: ui.mirror.checked, pos: [pos.x, pos.z], pts, hands },
+        { name: ui.liveName.value.trim().slice(0, 24), run: RUN },
       );
     }
   }
@@ -362,6 +393,10 @@ function apply(f: TrackFrame): void {
   );
 }
 
+// Erkennung bei jedem Kamerabild, die eigene 3D-Vorschau aber hoechstens 30-mal pro Sekunde (120-Hz-
+// Bildschirme zeichneten sonst viermal so oft) und beim Senden im Sparmodus nur 15-mal: Die
+// Grafikkarte bleibt fuer MediaPipe frei, es kommen mehr Bilder auf der Buehne an.
+let lastRender = 0;
 renderer.setAnimationLoop((now: number) => {
   try {
     if (tracker) {
@@ -379,6 +414,9 @@ renderer.setAnimationLoop((now: number) => {
     console.error(err);
     status('Fehler: ' + (err as Error).message);
   }
+  const interval = ui.live.checked && ui.liveLite.checked ? 1000 / 15 : 1000 / 30;
+  if (now - lastRender < interval - 2) return;
+  lastRender = now;
   controls.update();
   renderer.render(scene, camera);
 });
@@ -387,7 +425,8 @@ renderer.setAnimationLoop((now: number) => {
 async function loadSplat(): Promise<void> {
   if (!RUN || !retargeter) return;
   try {
-    const splat = await loadSplatAvatar(scene, renderer, retargeter, RUN, { debugParts: query.has('parts') });
+    // upload: einmal vorgerechnet liegt der Splat als skin.bin beim Server, die Buehne laedt nur noch diese Datei.
+    const splat = await loadSplatAvatar(scene, renderer, retargeter, RUN, { debugParts: query.has('parts'), upload: true });
     ui.splat.disabled = false;
     ui.splat.checked = true;
     // Roboter halbdurchsichtig unter dem Splat zeigt, wo die Zuteilung der Kleckse noch hakt.

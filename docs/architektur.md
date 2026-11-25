@@ -19,9 +19,14 @@
             │ Kamera → MediaPipe → Messung → Filter      │
             │        → Retargeting → Splat-Skinning      │
             └──────────────────────┬───────────────────┘
-                     POST /api/live (contracts/live-frame)
+              WebSocket /ws/send (binär, live/protocol.ts; contracts/live-frame, stage-meta)
                                    ▼
-                  web: live.html (Zuschauer, auch im WLAN)
+            ┌──────────────── Bühne ─────────────────────┐
+            │ server/stage.py: letzter Stand je Platz A/B, Folien  │
+            └──────────────────────┬───────────────────┘
+                     WebSocket /ws/stage (+ contracts/stage-slides)
+                                   ▼
+        web: live.html (Bühne für alle)   control.html (Regie: Folien)
 ```
 
 Die Naht zwischen Rekonstruktion und Avatar ist der Lauf-Ordner. Beide Seiten lassen sich getrennt
@@ -46,29 +51,44 @@ Interaktive Doku im Browser: `http://127.0.0.1:8931/api/docs` (nur auf diesem Re
 | `POST /api/chessboard?cam=A&reset=1` | ein Bild des Schachbretts | |
 | `POST /api/calibrate?cam=A` | Kameradaten aus den gesammelten Bildern | `intrinsics` |
 | `POST /api/capture?name=…&cam=a&kind=mp4\|webm\|json&rot=…` | Aufnahme speichern | `capture` (bei `kind=json`) |
-| `POST /api/live` | Bild der Tracking-Seite | `live-frame` |
-| `GET /api/live` | Server-Sent Events für Zuschauer | `live-frame` |
-| `GET /api/info` | Adressen im WLAN, Anzahl Zuschauer | |
+| `WS /ws/send?slot=A` | Tracking-Seite: Bilder binär, Name und Lauf als Text | `live-frame` (binär), `stage-meta` |
+| `WS /ws/stage` | Bühne und Regie: Folien, Plätze, Bilder mit Platz-Byte | `stage-slides`, `stage-meta`, `live-frame` |
+| `POST /api/slides?name=…` | Folien als PDF hochladen | `stage-slides` |
+| `POST /api/slide` | `{page}` umschalten oder `{pages}` melden | `stage-slides` |
+| `GET /stage/slides.pdf?v=<doc>` | das PDF | |
+| `POST /api/skin?run=…`, `GET /runs/<lauf>/skin.bin` | vorgerechneter Splat (`avatar/skin-cache.ts`) | |
+| `POST /api/login`, `POST /api/logout` | Presenter-Login (nur über `present.<Adresse>`) | |
+| `GET /api/info` | Adressen im WLAN, Anzahl Zuschauer, eigener Platz | |
 
-Geräte im Netz (mit `--lan`) bekommen nur die Zuschauerseite, ihre Dateien und die fertigen Läufe, und
-nur lesend (`Guard` und `REMOTE_ALLOWED` in `python/src/splattwin/server/app.py`). Fehler kommen immer als
-`{"error": "…"}` zurück, so wie die Seiten sie anzeigen.
+Wer was darf, steht in `server/access.py`, durchgesetzt von `Guard` in `server/app.py` (für HTTP und
+WebSockets): dieser Rechner alles; Presenter nach dem Login über eine Adresse, die mit `present.` beginnt,
+alles ausser Aufnahmen speichern, und sie senden immer auf ihrem eigenen Platz; alle anderen nur, was
+`REMOTE_ALLOWED` erlaubt (Bühne, ihre Dateien, fertige Läufe, Folien-PDF), nur lesend. Ein Tunnel kommt
+zwar auch von 127.0.0.1, zählt aber wegen seiner Weiterleitungs-Header und des fremden Hostnamens nicht als
+dieser Rechner. Fehler kommen immer als `{"error": "…"}` zurück, so wie die Seiten sie anzeigen.
 
-Die Weiterleitung an Zuschauer (`server/live.py`) läuft mit `asyncio`: Jeder Zuschauer wartet auf das
-nächste Bild, ein langsamer bekommt nur weniger Bilder statt einer wachsenden Verzögerung. Beim Beenden
-schliesst der Server zuerst alle Zuschauer-Streams, damit uvicorn ohne Abbruch herunterfährt.
+Caching (`cache_control` in `app.py`): Vite-Dateien unter `/assets/` (mit Hash im Namen) ein Jahr, Modelle
+und das Folien-PDF einer Fassung (`?v=`) einen Tag, Seiten und Läufe mit Nachfrage (304), API und
+WebSockets nie. Hinter Cloudflare kommen die grossen Dateien so aus dem Cache statt von diesem Rechner.
+
+Die Bühne (`server/stage.py`) läuft mit `asyncio`: Pro Kanal (Platz A, B, Plätze, Folien) zählt nur der
+neueste Stand, ein langsamer Zuschauer bekommt nur weniger Bilder statt einer wachsenden Verzögerung. Der
+Server liest die Bilder nicht, er prüft nur ihre Länge (`frame_ok`). Folien und Plätze liegen in
+`data/stage/` und überleben einen Neustart, damit die Bühne die Splats schon beim Öffnen laden kann. Beim
+Beenden schliesst der Server zuerst alle Zuschauer-Streams, damit uvicorn ohne Abbruch herunterfährt.
 OpenCV-Arbeit (Kalibrierung) und ffmpeg laufen in einem Thread-Pool, damit der Live-Teil nicht stockt.
 
 ## Web (`web/src`)
 
 | Ordner | Aufgabe | Darf benutzen |
 |---|---|---|
-| `core/` | reine Mathematik: Kalman, EKF, Stereo, Messung, Hände, Drehwinkel | nur `contracts` |
+| `core/` | reine Mathematik: Kalman, EKF, Stereo, Messung, Hände, Drehwinkel, Überblendung von Live-Bildern | nur `contracts` |
 | `contracts/` | aus `contracts/*.schema.json` erzeugte Typen | – |
 | `tracking/` | Kameras, MediaPipe, Tracker, Kalibrierung, Brücke zur App | `core`, `contracts`, `ui` |
-| `avatar/` | three.js: Szene, Roboter, Retargeting, Splat-Skinning | `core`, `contracts` |
+| `avatar/` | three.js: Szene, Roboter, Retargeting, Splat-Skinning (mit `skin.bin`), Raum der Bühne, Presenter | `core`, `contracts`, `live` (Typen) |
 | `capture/` | geführte Aufnahme: Pose prüfen, Ablauf, Rekorder, Ansage | `core`, `contracts`, `ui` |
-| `live/` | Live-Frames senden und empfangen | `core`, `contracts` |
+| `live/` | Binärformat der Live-Bilder, senden und empfangen über WebSockets | `core`, `contracts` |
+| `slides/` | Folien-PDF laden und Seiten zeichnen (pdf.js) | – |
 | `ui/` | kleine Helfer für die Seiten (DOM, localStorage) | – |
 | `pages/` | eine `main.ts` pro Seite: verdrahtet Bedienelemente und Module | alles |
 
@@ -90,7 +110,7 @@ entscheidet die Seite.
 | `geometry/` | Triangulation aus vielen Sehstrahlen, Umeyama, Quaternionen |
 | `vision/` | MediaPipe-Körperpunkte (in 3D trianguliert), Freistellen mit rembg und Hintergrundbild |
 | `pipeline/` | ein Modul pro Schritt: `frames`, `dataset`, `sfm`, `train`, `align`, `rig`, `merge_head`; `splat` und `process` setzen sie zusammen |
-| `server/` | `calibration`, `captures`, `live`, `network`, `app` (FastAPI) |
+| `server/` | `calibration`, `captures`, `stage` (Bühne), `access` (Login, wer darf was), `network`, `app` (FastAPI) |
 | `contracts.py` | Prüfung gegen `contracts/` |
 | `paths.py` | Orte im Projektordner (`data/`, Tools) |
 | `cli.py` | `splattwin serve \| process \| splat \| merge-head \| rig` |
@@ -108,8 +128,8 @@ zusammen mit der App ändern.
 
 | Teil | Wie | Befehl |
 |---|---|---|
-| `web/src/core` | synthetische Daten mit bekannter Lösung (Stereo-Kalibrierung, EKF mit zwei Kameras, …) | `npm test` |
-| `python` | Geometrie, Ausrichtung, Schachbrett mit bekannter Brennweite, Server, Verträge | `uv run pytest python` |
+| `web/src/core`, `web/src/live` | synthetische Daten mit bekannter Lösung (Stereo-Kalibrierung, EKF mit zwei Kameras, …), Binärformat, Überblendung | `npm test` |
+| `python` | Geometrie, Ausrichtung, Schachbrett mit bekannter Brennweite, Server, Bühne (Login, Tunnel, WebSockets), Verträge | `uv run pytest python` |
 | `contracts` | jedes Beispiel passt zu seinem Schema, in Web und Python | beide oben |
 | `app/Kit` | Verbindung, Uhren, Ablauf, Metadatei | `make swift-test` |
 

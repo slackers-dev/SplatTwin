@@ -2,16 +2,16 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-// Der Python-Server (uv run splattwin serve) liefert /api und /runs. Im Entwicklungsmodus leitet Vite
+// Der Python-Server (uv run splattwin serve) liefert /api, /ws, /runs und /stage. Im Entwicklungsmodus leitet Vite
 // diese Pfade dorthin weiter, damit Seiten und Server wie ein einziger Server wirken.
 const API = 'http://127.0.0.1:8931';
 
-const pages = ['index', 'tracking', 'capture', 'viewer', 'live'];
+const pages = ['index', 'tracking', 'capture', 'viewer', 'live', 'control', 'login'];
 
 export default defineConfig({
   server: {
     host: '127.0.0.1',
-    proxy: { '/api': API, '/runs': API },
+    proxy: { '/api': API, '/runs': API, '/stage': API, '/ws': { target: API.replace('http', 'ws'), ws: true } },
   },
   build: {
     target: 'es2023',

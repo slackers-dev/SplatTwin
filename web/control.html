@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splattwin – Regie</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+</head>
+<body>
+<header>
+  <img src="/logo.svg" alt="">
+  <h1>Regie</h1>
+  <span id="chipA" class="chip A">A · offline</span>
+  <span id="chipB" class="chip B">B · offline</span>
+  <span id="viewers" class="chip">– verbunden</span>
+  <a href="/live.html" target="_blank">Bühne öffnen</a>
+  <a href="/tracking.html">Tracking</a>
+  <button id="logout" hidden>Ausloggen</button>
+</header>
+<main>
+  <section>
+    <p class="label">Jetzt auf der Bühne</p>
+    <div class="slide"><canvas id="cur"></canvas></div>
+    <div class="controls">
+      <button id="prev" class="big">← Zurück</button>
+      <span id="page">–</span>
+      <button id="next" class="big">Weiter →</button>
+      <label class="filebtn">PDF hochladen<input id="file" type="file" accept="application/pdf,.pdf"></label>
+    </div>
+    <p id="status"></p>
+  </section>
+  <aside>
+    <section>
+      <p class="label">Nächste Folie</p>
+      <div class="slide"><canvas id="nxt"></canvas></div>
+    </section>
+    <section class="hint">
+      <p>Umschalten mit <kbd>←</kbd> <kbd>→</kbd>, <kbd>Bild↑</kbd> <kbd>Bild↓</kbd> oder einem Presenter-Klicker.
+        Alle Zuschauer und beide Presenter sehen dieselbe Folie.</p>
+      <p>PowerPoint: Datei › Exportieren › PDF. Keynote: Ablage › Exportieren › PDF.
+        Animationen gehen dabei verloren, jede Folie ist ein Standbild.</p>
+      <p>Bei A und B steht, wie viele Bilder pro Sekunde ankommen. Unter etwa 20 ruckelt es: Tracking-Fenster
+        sichtbar lassen, «Finger tracken» aus, «Sparmodus beim Senden» an.</p>
+    </section>
+  </aside>
+</main>
+<script type="module" src="/src/pages/control/main.ts"></script>
+</body>
+</html>
