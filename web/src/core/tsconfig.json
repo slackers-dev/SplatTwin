@@ -1,0 +1,16 @@
+{
+  // core ist reine Mathematik: kein DOM, kein three.js, kein MediaPipe. Die fehlende DOM-Bibliothek
+  // laesst jeden Zugriff auf window, document oder HTMLVideoElement schon beim Kompilieren scheitern.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "../../.tsbuild/core",
+    "rootDir": "..",
+    "tsBuildInfoFile": "../../.tsbuild/core.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["./**/*.ts", "../contracts/**/*.ts"],
+  "exclude": ["../**/*.test.ts"]
+}

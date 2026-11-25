@@ -17,7 +17,7 @@
       "minItems": 2,
       "maxItems": 2
     },
-    "pts": { "type": "array", "description": "33 Gelenke von MediaPipe Pose, null = unbekannt.", "items": { "$ref": "#/$defs/point" }, "minItems": 33, "maxItems": 33 },
+    "pts": { "type": "array", "tsType": "([number, number, number] | null)[]", "description": "33 Gelenke von MediaPipe Pose, null = unbekannt.", "items": { "$ref": "#/$defs/point" }, "minItems": 33, "maxItems": 33 },
     "hands": {
       "type": "object",
       "required": ["Left", "Right"],
@@ -36,7 +36,7 @@
     },
     "hand": {
       "oneOf": [
-        { "type": "array", "description": "21 Punkte von MediaPipe Hands.", "items": { "$ref": "#/$defs/point" }, "minItems": 21, "maxItems": 21 },
+        { "type": "array", "tsType": "([number, number, number] | null)[]", "description": "21 Punkte von MediaPipe Hands.", "items": { "$ref": "#/$defs/point" }, "minItems": 21, "maxItems": 21 },
         { "type": "null" }
       ]
     }
