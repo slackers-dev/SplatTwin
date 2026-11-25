@@ -34,6 +34,8 @@ __pycache__/
 *.exr
 # Ausnahme: Kalibrier-Schachbrett wird von der App gebraucht
 !/schachbrett.png
+# Ausnahme: App-Icons der Mac- und iPhone-App
+!/app/*/Assets.xcassets/**/*.png
 
 # --- Splat-Pipeline: Daten, Ergebnisse, Tools ---
 splat/captures/

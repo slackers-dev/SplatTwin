@@ -19,6 +19,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # Eigenes Entwicklerteam: in Local.xcconfig eintragen (siehe README), nicht hier.
     DEAD_CODE_STRIPPING: YES
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 configFiles:
   Debug: Local.xcconfig
   Release: Local.xcconfig
