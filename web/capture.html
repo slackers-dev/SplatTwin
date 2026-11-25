@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splattwin – Aufnahme</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+</head>
+<body>
+  <div class="bar">
+    <label>Kamera A – vorne (dorthin schaust du am Anfang)<select id="camA"></select></label>
+    <label>Kamera B – nur Kontrolle (optional)<select id="camB"></select></label>
+    <label>Name<input id="name" value="aufnahme"></label>
+    <label>Leerer Raum (s)<input id="tBg" type="number" min="1" value="4"></label>
+    <label>Drehung etwa (s)<input id="tTurn" type="number" min="3" value="20"></label>
+    <label>Bild drehen<select id="rot"><option value="0">nein</option><option value="90">90° nach rechts</option><option value="270">90° nach links</option></select></label>
+    <label>Gesichtsscan<select id="face"><option value="1">ja</option><option value="0">nein</option></select></label>
+    <label>&nbsp;<a href="/tracking.html">Live-Avatar</a></label>
+    <button id="start">Aufnahme starten</button>
+  </div>
+  <div id="phase">Lade …</div>
+  <div id="bar"><i></i></div>
+  <div class="stage">
+    <div class="view" id="viewA"><video id="videoA" playsinline muted autoplay></video><canvas class="pic" hidden></canvas><canvas class="overlay"></canvas><span class="tag">A</span></div>
+    <div class="view" id="viewB"><video id="videoB" playsinline muted autoplay></video><canvas class="pic" hidden></canvas><canvas class="overlay"></canvas><span class="tag">B</span></div>
+  </div>
+  <pre id="out" hidden></pre>
+
+<script type="module" src="/src/pages/capture/main.ts"></script>
+</body>
+</html>
