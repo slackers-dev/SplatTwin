@@ -9,6 +9,7 @@ dependencies = [
     "jsonschema",
     "fastapi>=0.162.5",
     "uvicorn>=0.54.0",
+    "websockets>=15",
 ]
 
 [project.optional-dependencies]

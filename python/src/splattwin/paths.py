@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 DATA = Path(os.environ.get("SPLATTWIN_DATA", ROOT / "data")).resolve()
 CAPTURES = DATA / "captures"  # Aufnahmen: Videos und Metadateien
 RUNS = DATA / "runs"  # Ergebnisse der Pipeline, ein Ordner pro Lauf
+STAGE = DATA / "stage"  # Buehne: Folien (slides.pdf, slides.json) und Plaetze (seats.json)
 TOOLS = DATA / "tools"  # Brush und Modelle
 
 CONTRACTS = ROOT / "contracts"

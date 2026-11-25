@@ -1,6 +1,6 @@
 """Einstieg fuer alles auf der Kommandozeile: `uv run splattwin <befehl>`.
 
-serve       lokaler Server fuer die Seiten (Tracking, Aufnahme, Viewer, Zuschauen)
+serve       lokaler Server fuer die Seiten (Tracking, Aufnahme, Viewer, Buehne)
 process     eine Aufnahme ganz durchrechnen (Splat, Kopf, Gelenke)
 splat       Video -> Splat (einzelner Schritt)
 merge-head  Kopf-Splat auf Koerper-Splat setzen (einzelner Schritt)
@@ -18,9 +18,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     sub = ap.add_subparsers(dest="command", required=True, metavar="befehl")
 
-    p = sub.add_parser("serve", help="lokaler Server (Seiten, Kalibrierung, Aufnahmen, Live)")
+    p = sub.add_parser("serve", help="lokaler Server (Seiten, Kalibrierung, Aufnahmen, Buehne)")
     p.add_argument("port", type=int, nargs="?", default=8931)
-    p.add_argument("--lan", action="store_true", help="auch im lokalen Netz erreichbar (nur zum Zuschauen)")
+    p.add_argument("--lan", action="store_true", help="auch im lokalen Netz erreichbar (Buehne, Presenter-Login)")
+    p.add_argument("--public", action="store_true", help="hinter einem Tunnel mit HTTPS (Login-Cookie nur ueber HTTPS)")
 
     p = sub.add_parser("process", help="Aufnahme ganz durchrechnen")
     p.add_argument("capture", help="Name der Aufnahme oder Pfad zu data/captures/<name>.json")
@@ -43,7 +44,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "serve":
         from splattwin.server.app import serve
 
-        serve(args.port, args.lan)
+        serve(args.port, args.lan, args.public)
     elif args.command == "process":
         from splattwin.pipeline import process
 
