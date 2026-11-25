@@ -18,7 +18,8 @@ Der heutige Aufbau steht in [`architektur.md`](architektur.md); dieses Dokument 
   das Flag an.
 - **Seiten:** `tracking.html` (vorher `index.html`), `viewer.html` (vorher `splat.html`), neu eine
   Startseite `index.html`.
-- **Noch nicht angelegt:** `docs/arbeitspakete.md`, `docs/entscheide/`.
+- **Noch nicht angelegt:** `docs/arbeitspakete.md`. Die Entscheide liegen statt in `docs/entscheide/` in
+  [`project-documentation/entscheidungen/`](../project-documentation/entscheidungen/).
 - **CI ohne Swift:** die App-Tests laufen lokal (`make swift-test`).
 
 ## Warum
