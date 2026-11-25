@@ -1,6 +1,25 @@
-# Vorschlag: saubere Projektstruktur für den Neuaufbau
+# Saubere Projektstruktur für den Neuaufbau
 
-**Status:** Vorschlag zur Review, noch nichts umgesetzt (25.11.2026)
+**Status:** umgesetzt am 25.11.2026 auf dem Branch `refactor/projektstruktur`, mit den Abweichungen unten.
+Der heutige Aufbau steht in [`architektur.md`](architektur.md); dieses Dokument bleibt als Begründung.
+
+## Abweichungen in der Umsetzung
+
+- **Formate unverändert.** Die Schemas in `contracts/` beschreiben die Dateien so, wie Browser, App und
+  Pipeline sie heute schreiben (ohne `schemaVersion`, `capture.json` mit `saved` und `height`). Ein
+  Formatwechsel hätte mehr Änderungen in der App verlangt, als sich ohne iPhone testen lassen.
+  Die Punkte unter „Auswirkungen auf die App“ zur Metadatei entfallen damit.
+- **Server ohne FastAPI.** Der Server ist in Module aufgeteilt (`calibration`, `captures`, `live`, `app`),
+  läuft aber weiter mit der Standardbibliothek. FastAPI bleibt offener Punkt 2.
+- **Python als uv-Workspace.** `python/` ist ein Mitglied, der Projektordner der Workspace mit der
+  gemeinsamen `.venv`. So startet die App den Server weiter über `.venv/bin/python`.
+- **Kein `legacy/`.** Der alte Code ist in der Git-Historie (`main`).
+- **`core` mit `noUncheckedIndexedAccess: false`.** Matrizen und Vektoren fester Grösse; in der App bleibt
+  das Flag an.
+- **Seiten:** `tracking.html` (vorher `index.html`), `viewer.html` (vorher `splat.html`), neu eine
+  Startseite `index.html`.
+- **Noch nicht angelegt:** `docs/arbeitspakete.md`, `docs/entscheide/`.
+- **CI ohne Swift:** die App-Tests laufen lokal (`make swift-test`).
 
 ## Warum
 

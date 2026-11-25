@@ -1,4 +1,4 @@
-// Drehwinkel einer Person aus der Schulterlinie mitzaehlen (geführte Aufnahme).
+// Drehwinkel einer Person aus der Schulterlinie mitzaehlen (gefuehrte Aufnahme).
 import { LM, type Landmark } from './landmarks';
 
 /** Winkel auf -180..180 Grad. */
