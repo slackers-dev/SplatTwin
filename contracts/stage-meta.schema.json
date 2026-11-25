@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage-meta.schema.json",
+  "title": "StageMeta",
+  "description": "Name und Splat-Lauf eines Presenters auf der Bühne. Schreiben: Tracking-Seite (Text über /ws/send, nur bei Änderung). Lesen: Bühne und Regie (/ws/stage), damit sie den Splat schon vor dem ersten Bild laden. Der Server merkt sich den letzten Stand pro Platz in data/stage/seats.json.",
+  "type": "object",
+  "required": [
+    "name",
+    "run"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "maxLength": 24,
+      "description": "Angezeigter Name, leer = «Platz A» bzw. «Platz B»."
+    },
+    "run": {
+      "type": "string",
+      "maxLength": 60,
+      "pattern": "^[\\w-]*$",
+      "description": "Lauf, dessen Splat die Tracking-Seite zeigt, leer = nur Roboter."
+    }
+  }
+}

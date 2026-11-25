@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage-slides.schema.json",
+  "title": "StageSlides",
+  "description": "Stand der Folien auf der Bühne. Schreiben: Server (nach POST /api/slides und /api/slide aus der Regie). Lesen: Bühne und Regie (/ws/stage). Das PDF liegt unter /stage/slides.pdf?v=<doc>, gespeichert in data/stage/.",
+  "type": "object",
+  "required": [
+    "doc",
+    "page",
+    "pages"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "doc": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Kennung der hochgeladenen Fassung, null = keine Folien."
+    },
+    "page": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Aktuelle Folie, ab 1."
+    },
+    "pages": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Anzahl Folien, 0 = noch unbekannt (die Regie meldet sie nach dem Laden)."
+    },
+    "name": {
+      "type": "string",
+      "description": "Dateiname beim Hochladen."
+    }
+  }
+}

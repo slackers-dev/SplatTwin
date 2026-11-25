@@ -106,17 +106,13 @@ export interface Intrinsics {
 export type Hand = ([number, number, number] | null)[] | null;
 
 /**
- * Ein Bild des Live-Trackings, nur Punkte und kein Video. Schreiben: Tracking-Seite (POST /api/live). Lesen: Zuschauerseite (GET /api/live, Server-Sent Events). Koordinaten wie im Avatar (three.js, Meter, relativ zur Hüfte).
+ * Ein Bild des Live-Trackings, nur Punkte und kein Video. Schreiben: Tracking-Seite, Lesen: Bühne und Regie. Übertragen wird es binär über WebSockets (/ws/send, /ws/stage), Format in web/src/live/protocol.ts; dieses Schema beschreibt das entpackte Bild. Name und Splat-Lauf des Presenters stehen in stage-meta. Koordinaten wie im Avatar (three.js, Meter, relativ zur Hüfte).
  */
 export interface LiveFrame {
   /**
    * Zeitpunkt beim Sender in ms (performance.now).
    */
   t: number;
-  /**
-   * Lauf, dessen Splat die Tracking-Seite zeigt.
-   */
-  run: string;
   /**
    * Nur Oberkörper: Hüfte und Beine stehen still.
    */
@@ -130,7 +126,7 @@ export interface LiveFrame {
    */
   pos: [number, number];
   /**
-   * 33 Gelenke von MediaPipe Pose, null = unbekannt.
+   * 33 Gelenke von MediaPipe Pose, null = unbekannt. Übertragen werden nur die 17, die der Avatar braucht.
    *
    * @minItems 33
    * @maxItems 33
@@ -183,4 +179,40 @@ export interface RunSplat {
    * Körpergrösse in Metern, aus der der Massstab folgt.
    */
   height: number;
+}
+
+/**
+ * Name und Splat-Lauf eines Presenters auf der Bühne. Schreiben: Tracking-Seite (Text über /ws/send, nur bei Änderung). Lesen: Bühne und Regie (/ws/stage), damit sie den Splat schon vor dem ersten Bild laden. Der Server merkt sich den letzten Stand pro Platz in data/stage/seats.json.
+ */
+export interface StageMeta {
+  /**
+   * Angezeigter Name, leer = «Platz A» bzw. «Platz B».
+   */
+  name: string;
+  /**
+   * Lauf, dessen Splat die Tracking-Seite zeigt, leer = nur Roboter.
+   */
+  run: string;
+}
+
+/**
+ * Stand der Folien auf der Bühne. Schreiben: Server (nach POST /api/slides und /api/slide aus der Regie). Lesen: Bühne und Regie (/ws/stage). Das PDF liegt unter /stage/slides.pdf?v=<doc>, gespeichert in data/stage/.
+ */
+export interface StageSlides {
+  /**
+   * Kennung der hochgeladenen Fassung, null = keine Folien.
+   */
+  doc: string | null;
+  /**
+   * Aktuelle Folie, ab 1.
+   */
+  page: number;
+  /**
+   * Anzahl Folien, 0 = noch unbekannt (die Regie meldet sie nach dem Laden).
+   */
+  pages: number;
+  /**
+   * Dateiname beim Hochladen.
+   */
+  name?: string;
 }
