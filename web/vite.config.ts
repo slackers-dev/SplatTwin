@@ -15,7 +15,9 @@ export default defineConfig({
   },
   build: {
     target: 'es2023',
-    rollupOptions: {
+    // three.js und Spark sind zusammen gut 3 MB (vorher genauso gross vom CDN geladen).
+    chunkSizeWarningLimit: 4000,
+    rolldownOptions: {
       input: Object.fromEntries(pages.map((p) => [p, resolve(import.meta.dirname, `${p}.html`)])),
     },
   },

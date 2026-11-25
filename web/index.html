@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splattwin</title>
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
+<style>
+  :root { color-scheme: dark; --bg: #14161a; --panel: #1e2127; --line: #343944; --text: #e6e8ec; --dim: #9aa1ad; --accent: #6cc4a1; }
+  body { margin: 0; padding: 40px 16px; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; font-size: 24px; }
+  h1 img { width: 36px; height: 36px; }
+  p { color: var(--dim); margin: 0 0 24px; }
+  a.card { display: block; margin: 10px 0; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--text); text-decoration: none; }
+  a.card:hover { border-color: var(--accent); }
+  a.card span { display: block; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="/logo.svg" alt="">Splattwin</h1>
+  <p>Eine Person als Gaussian Splat aufnehmen und live per Kamera-Tracking bewegen.</p>
+  <a class="card" href="/tracking.html">Live-Avatar<span>Webcam oder Video: Körper- und Handtracking, Kalman-Filter, Stereo mit zwei Kameras</span></a>
+  <a class="card" href="/capture.html">Aufnahme<span>Geführte Aufnahme für den Splat: leerer Raum, Pose, Drehung, Gesichtsscan</span></a>
+  <a class="card" href="/viewer.html">Splat ansehen<span>Ergebnis der Pipeline, mit ?run=&lt;lauf&gt;</span></a>
+  <a class="card" href="/live.html">Zuschauen<span>Den Avatar der Tracking-Seite mitverfolgen, auch von anderen Geräten im WLAN</span></a>
+</main>
+</body>
+</html>
