@@ -6,12 +6,12 @@ Projekt im Modul CVAI: eine Person als Gaussian Splat aufnehmen und live per Kam
 Aufnahme            Rekonstruktion                       Live-Avatar
 capture.html   ──►  splattwin process                ──►  tracking.html
 oder Mac-App        Video → Masken → COLMAP → Brush       Kamera → Pose → Filter → Skelett → Splat
-                    → splat.ply, splat.json, rig.json     live.html: Zuschauer im WLAN
+                    → splat.ply, splat.json, rig.json     live.html: Bühne mit zwei Presentern und Folien
 ```
 
 | Ordner | Inhalt |
 |---|---|
-| [`web/`](web/) | Seiten in TypeScript (Vite): Tracking, Aufnahme, Viewer, Zuschauen |
+| [`web/`](web/) | Seiten in TypeScript (Vite): Tracking, Aufnahme, Viewer, Bühne, Regie |
 | [`python/`](python/) | Paket `splattwin`: Pipeline (Video → Splat) und lokaler Server |
 | [`contracts/`](contracts/) | Datenformate zwischen den Teilen als JSON-Schema |
 | [`app/`](app/) | Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md) |
@@ -71,17 +71,33 @@ Ergebnis in `data/runs/video/`, ansehen mit `viewer.html?run=video`, als Avatar 
 Eine Aufnahme aus `capture.html` oder der App rechnet `uv run splattwin process <name>` in einem Schritt
 (Splat, Kopf, Gelenke). Hinweise für gute Aufnahmen: [`docs/notizen-smpl-avatar.md`](docs/notizen-smpl-avatar.md).
 
-### Live zuschauen
+### Live-Präsentation (Bühne)
 
-Die Tracking-Seite kann den Avatar live an andere Seiten senden: nur die Gelenkpunkte, kein Video.
+Zwei Presenter als Splat (oder Roboter) und die Folien in einem 3D-Raum, live für alle Zuschauer im
+Browser. Übertragen werden nur Gelenkpunkte, etwa 110 bis 360 Bytes pro Bild, kein Video.
 
 ```sh
-uv run splattwin serve --lan   # ohne --lan nur auf diesem Rechner
+SPLATTWIN_PW_A=… SPLATTWIN_PW_B=… uv run splattwin serve --lan   # ohne Passwörter: zufällig, im Terminal
 ```
 
-Auf der Tracking-Seite «Avatar an Zuschauer senden» einschalten; dort steht auch die Adresse für andere
-Geräte im WLAN (`http://<IP>:8931/live.html`). Geräte im Netz sehen nur die Zuschauerseite und den Splat,
-senden, aufnehmen und kalibrieren geht nur am Rechner selbst.
+| Seite | Wer | Wozu |
+|---|---|---|
+| `live.html` | alle | Bühne: Platz A (links, mint) und B (rechts, blau), Leinwand, Ansichten, «Folie gross» fürs Handy |
+| `login.html` | Presenter | Login für Platz A oder B, nur über eine Adresse, die mit `present.` beginnt |
+| `tracking.html` | Presenter | unter «Live senden» Name eintragen und «Auf die Bühne senden» einschalten |
+| `control.html` | Presenter | Regie: PDF hochladen, Folien umschalten (Pfeiltasten, Klicker), Bildrate pro Presenter |
+
+- **Am eigenen Rechner:** direkt über `127.0.0.1` darf man alles und wählt den Platz selbst. Den Login
+  testen mit `http://present.localhost:8931/` (Chrome und Safari leiten `*.localhost` auf den eigenen Rechner).
+- **Im Internet:** zwei Hostnamen auf denselben Server, z. B. mit einem Cloudflare-Tunnel:
+  `splattwin.<domain>` für Zuschauer, `present.splattwin.<domain>` für Presenter, Server mit `--public`.
+  Über HTTPS darf der Browser auf der Presenter-Adresse die Kamera benutzen, beide tracken vom eigenen Laptop.
+- **Folien:** PowerPoint › Datei › Exportieren › PDF (Animationen gehen verloren). Liegt in `data/stage/`.
+- **Splat vorgerechnet:** Die Tracking-Seite rechnet die Zuordnung der Kleckse zum Skelett einmal und
+  speichert sie als `data/runs/<lauf>/skin.bin`; die Bühne lädt nur diese Datei (460 KB statt 2,7 MB PLY,
+  kein Rechnen auf dem Handy) und den Splat schon beim Öffnen.
+- **Ruckeln:** Bühne und Regie zeigen pro Presenter «B/s». Unter etwa 20: Tracking-Fenster sichtbar lassen
+  (Chrome bremst verdeckte Fenster), «Finger tracken» aus, «Sparmodus beim Senden» an.
 
 ## Entwickeln
 
