@@ -457,7 +457,7 @@ final class AppModel: ObservableObject {
     /// Was vor dem Start nicht stimmt. Leere Liste = bereit (H-14, M-8).
     func preflight() -> [(ok: Bool, text: String)] {
         var list: [(Bool, String)] = []
-        list.append((store.isValid, store.isValid ? "Projektordner gefunden" : "Projektordner ohne splat/process_capture.py – unter Aufnahmen wählen"))
+        list.append((store.isValid, store.isValid ? "Projektordner gefunden" : "Projektordner ohne python/pyproject.toml – unter Aufnahmen wählen"))
         list.append((poseReady, poseReady ? "Körpererkennung bereit" : (poseError ?? "Körpererkennung lädt …")))
         guard !recordingCameras.isEmpty else { return list + [(false, "Keine Kamera verbunden")] }
         for camera in recordingCameras {
@@ -528,7 +528,7 @@ final class AppModel: ObservableObject {
         let cameras = recordingCameras
         guard let main = cameras.first, main.isConnected else { return run = .failed("Kamera A ist nicht verbunden.") }
         guard CaptureStore.validName(captureName) else { return run = .failed("Name: nur Buchstaben, Ziffern, - und _ (höchstens 40 Zeichen).") }
-        guard store.isValid else { return run = .failed("Im Projektordner fehlt splat/process_capture.py.") }
+        guard store.isValid else { return run = .failed("Im Projektordner fehlt python/pyproject.toml.") }
         guard poseReady else { return run = .failed("Die Körpererkennung ist noch nicht bereit.") }
         let options = activeOptions
         let body = mode == .face && !faceBody.isEmpty ? faceBody : nil
@@ -661,7 +661,7 @@ final class AppModel: ObservableObject {
             if info.dropped > info.frames / 50 { notes.append("Kamera \(key.uppercased()): \(info.dropped) Bilder verworfen, das Gerät kam nicht nach.") }
         }
 
-        // Zeiten als Sekunden im Video A, so wie process_capture.py sie erwartet.
+        // Zeiten als Sekunden im Video A, so wie splattwin process sie erwartet.
         var marks = engine.marks.mapValues { (($0 - startA) * 1000).rounded() / 1000 }
         for (label, value) in engine.degrees { marks[label] = Double(value) }
         let meta = CaptureMeta(name: name, marks: marks, offset: entries.first { $0.key == "b" }?.offset ?? 0, saved: saved,
@@ -734,7 +734,7 @@ final class AppModel: ObservableObject {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.message = "Ordner «projekt» wählen (darin liegen server.py und der Ordner splat)."
+        panel.message = "Projektordner wählen (darin liegen python/, web/ und data/)."
         if panel.runModal() == .OK, let url = panel.url { projectDir = url }
     }
 
@@ -744,7 +744,7 @@ final class AppModel: ObservableObject {
         pipelineName = name
         reports[name] = nil
         do {
-            try runner.run(["uv", "run", "process_capture.py", "captures/\(name).json"], in: projectDir.appendingPathComponent("splat"),
+            try runner.run(["uv", "run", "splattwin", "process", name], in: projectDir,
                            onOutput: { [weak self] in self?.appendLog($0) },
                            onExit: { [weak self] code in
                                guard let self else { return }
@@ -806,11 +806,11 @@ final class AppModel: ObservableObject {
 
     // MARK: Browser-Seiten (M-14, Tracking)
 
-    /// Startet server.py, falls er nicht schon laeuft, und oeffnet eine Seite des Prototyps.
+    /// Startet den Server (splattwin serve), falls er nicht schon laeuft, und oeffnet eine Seite.
     func openPage(_ path: String) {
         Task {
             guard await ensureServer() else {
-                message = "server.py lässt sich nicht starten. Im Projektordner einmal «uv sync» ausführen, dann «uv run server.py» testen."
+                message = "Der Server lässt sich nicht starten. Im Projektordner einmal «make setup» ausführen, dann «uv run splattwin serve» testen."
                 return
             }
             if let url = URL(string: "http://127.0.0.1:8931/\(path)") { NSWorkspace.shared.open(url) }
@@ -834,10 +834,10 @@ final class AppModel: ObservableObject {
         guard FileManager.default.isExecutableFile(atPath: python.path) else { return false }
         let process = Process()
         process.executableURL = python
-        process.arguments = ["server.py"]
+        process.arguments = ["-m", "splattwin", "serve"]
         process.currentDirectoryURL = projectDir
         var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = PipelineRunner.searchPath // server.py ruft ffmpeg auf
+        environment["PATH"] = PipelineRunner.searchPath // der Server ruft ffmpeg auf
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

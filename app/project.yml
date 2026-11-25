@@ -77,5 +77,5 @@ targets:
         NSBonjourServices: [_splattwin._tcp]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
-        # Ordner «projekt» mit server.py und splat/: von hier aus startet die App Pipeline und Server.
+        # Projektordner (python/, web/, data/): von hier aus startet die App Pipeline und Server.
         SplattwinProjectDir: $(SRCROOT)/..

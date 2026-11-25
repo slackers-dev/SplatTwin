@@ -1,7 +1,7 @@
 import Foundation
 
 /// Die Metadatei einer Aufnahme (M-9). Die oberen Felder sind dieselben wie bei capture.html,
-/// damit `process_capture.py` beide Arten von Aufnahmen gleich verarbeitet. Unter `app` steht
+/// damit `splattwin process` beide Arten von Aufnahmen gleich verarbeitet (Vertrag: contracts/capture.schema.json). Unter `app` steht
 /// alles Weitere, was die App weiss.
 public struct CaptureMeta: Codable, Equatable {
     public struct Saved: Codable, Equatable {
@@ -101,7 +101,7 @@ public struct CaptureEntry: Identifiable, Equatable {
     public let hasSplat: Bool
 }
 
-/// Ablage der Aufnahmen im Projektordner: `splat/captures` fuer Rohdaten, `splat/runs` fuer Ergebnisse.
+/// Ablage der Aufnahmen im Projektordner: `data/captures` fuer Rohdaten, `data/runs` fuer Ergebnisse.
 public struct CaptureStore {
     public let project: URL
 
@@ -109,9 +109,9 @@ public struct CaptureStore {
         self.project = project
     }
 
-    public var captures: URL { project.appendingPathComponent("splat/captures") }
-    public var runs: URL { project.appendingPathComponent("splat/runs") }
-    public var isValid: Bool { FileManager.default.fileExists(atPath: project.appendingPathComponent("splat/process_capture.py").path) }
+    public var captures: URL { project.appendingPathComponent("data/captures") }
+    public var runs: URL { project.appendingPathComponent("data/runs") }
+    public var isValid: Bool { FileManager.default.fileExists(atPath: project.appendingPathComponent("python/pyproject.toml").path) }
 
     public func metaURL(_ name: String) -> URL { captures.appendingPathComponent(name + ".json") }
     public func runURL(_ name: String) -> URL { runs.appendingPathComponent(name) }

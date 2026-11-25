@@ -15,10 +15,11 @@ Körpererkennung, um beim Start das MediaPipe-Modell zu laden (wie `capture.html
 
 ## Bauen und starten
 
-Voraussetzung: Xcode 26, für Pipeline und Seiten wie bisher `uv`, `ffmpeg`, `colmap` (Homebrew).
+Voraussetzung: Xcode 26. Für Pipeline und Seiten den Projektordner einrichten (`make setup`, siehe
+[`../README.md`](../README.md)): die App startet `uv run splattwin process` und `splattwin serve`.
 
 ```sh
-cd projekt/app
+cd app
 open Splattwin.xcodeproj
 ```
 
@@ -72,7 +73,7 @@ app/
     CaptureStore.swift  Metadatei, Ablage, Pipeline starten, Qualitätsbericht
   iOS/        iPhone-App
   Mac/        Mac-App; Resources/pose.html ist die Körpererkennung (MediaPipe wie im Prototyp)
-../app-kamera.js   Bindet die Kameras der App in index.html ein
+../web/src/tracking/app-bridge.ts   Bindet die Kameras der App in die Tracking-Seite ein
 ```
 
 **Verbindung.** Das Handy bietet im lokalen Netz einen Dienst an (Bonjour, `_splattwin._tcp`), der Mac
@@ -91,8 +92,9 @@ aufgenommene Bild hat eine Zeit auf der Uhr des Macs.
 
 **Aufnahme.** Auf dem Gerät als HEVC mit etwa 60 Mbit/s bei 4K, Rec. 709, ohne Ton. Daneben eine Datei
 `<name>_<kamera>.frames.json` mit der Zeit jedes Bildes, den Kameradaten pro Bild, allen Einstellungen
-und der Schwerkraftrichtung. Auf dem Mac landet alles in `splat/captures/`, die Metadatei
-`<name>.json` hat dieselben Felder wie die von `capture.html` und zusätzlich einen Teil `app`.
+und der Schwerkraftrichtung. Auf dem Mac landet alles in `data/captures/`, die Metadatei
+`<name>.json` folgt dem Vertrag `contracts/capture.schema.json`, wie die von `capture.html`, und hat
+zusätzlich einen Teil `app`.
 
 **Körpererkennung.** Dieselbe MediaPipe-Erkennung wie in `capture.html`, in einer unsichtbaren
 Webansicht der Mac-App. Apples eigene Körpererkennung wurde geprüft und verworfen: am Video `scan-2101`
@@ -101,7 +103,7 @@ zählte sie 0° statt 355°, weil sie das Skelett in einer festen Körperlage li
 ## Tests
 
 ```sh
-cd projekt/app/Kit && swift test
+cd app/Kit && swift test
 ```
 
 20 Tests: Pakete, Uhrenabgleich, Kopplung mit falschem Code, Livebild, Aufnahme und Dateiübertragung
@@ -112,7 +114,7 @@ Ganzer Durchlauf der Mac-App ohne Kamera, mit einem Video als Kamera:
 
 ```sh
 build/Build/Products/Debug/Splattwin.app/Contents/MacOS/Splattwin \
-  --video ../splat/captures/scan-2101_a.mp4 --auto --name apptest
+  --video ../data/captures/scan-2101_a.mp4 --auto --name apptest
 ```
 
 Weitere Schalter: `--testbild`, `--ohne-gesicht`, `--nur-gesicht`, `--pose-log <Datei>`.
