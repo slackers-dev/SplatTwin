@@ -32,11 +32,13 @@ Aufnahmen.
 
 | Was | Wo | Port |
 |---|---|---|
-| Server (`uv run splattwin serve`) | liefert `web/dist` und `data/runs`, API | 8931 |
+| Server (`uv run splattwin serve`, FastAPI mit uvicorn) | liefert `web/dist` und `data/runs`, API | 8931 |
 | Vite (`npm run dev` in `web/`) | nur beim Entwickeln, leitet `/api` und `/runs` an 8931 weiter | 5173 |
 | Brücke der Mac-App | WebSocket, Kameras der App für den Browser | 8932 |
 
 ### API des Servers
+
+Interaktive Doku im Browser: `http://127.0.0.1:8931/api/docs` (nur auf diesem Rechner).
 
 | Methode, Pfad | Zweck | Vertrag |
 |---|---|---|
@@ -48,8 +50,14 @@ Aufnahmen.
 | `GET /api/live` | Server-Sent Events für Zuschauer | `live-frame` |
 | `GET /api/info` | Adressen im WLAN, Anzahl Zuschauer | |
 
-Geräte im Netz (mit `--lan`) bekommen nur die Zuschauerseite, ihre Dateien und die fertigen Läufe
-(`REMOTE_ALLOWED` in `python/src/splattwin/server/app.py`).
+Geräte im Netz (mit `--lan`) bekommen nur die Zuschauerseite, ihre Dateien und die fertigen Läufe, und
+nur lesend (`Guard` und `REMOTE_ALLOWED` in `python/src/splattwin/server/app.py`). Fehler kommen immer als
+`{"error": "…"}` zurück, so wie die Seiten sie anzeigen.
+
+Die Weiterleitung an Zuschauer (`server/live.py`) läuft mit `asyncio`: Jeder Zuschauer wartet auf das
+nächste Bild, ein langsamer bekommt nur weniger Bilder statt einer wachsenden Verzögerung. Beim Beenden
+schliesst der Server zuerst alle Zuschauer-Streams, damit uvicorn ohne Abbruch herunterfährt.
+OpenCV-Arbeit (Kalibrierung) und ffmpeg laufen in einem Thread-Pool, damit der Live-Teil nicht stockt.
 
 ## Web (`web/src`)
 
@@ -82,7 +90,7 @@ entscheidet die Seite.
 | `geometry/` | Triangulation aus vielen Sehstrahlen, Umeyama, Quaternionen |
 | `vision/` | MediaPipe-Körperpunkte (in 3D trianguliert), Freistellen mit rembg und Hintergrundbild |
 | `pipeline/` | ein Modul pro Schritt: `frames`, `dataset`, `sfm`, `train`, `align`, `rig`, `merge_head`; `splat` und `process` setzen sie zusammen |
-| `server/` | `calibration`, `captures`, `live`, `network`, `app` (HTTP) |
+| `server/` | `calibration`, `captures`, `live`, `network`, `app` (FastAPI) |
 | `contracts.py` | Prüfung gegen `contracts/` |
 | `paths.py` | Orte im Projektordner (`data/`, Tools) |
 | `cli.py` | `splattwin serve \| process \| splat \| merge-head \| rig` |

@@ -9,8 +9,8 @@ Der heutige Aufbau steht in [`architektur.md`](architektur.md); dieses Dokument 
   Pipeline sie heute schreiben (ohne `schemaVersion`, `capture.json` mit `saved` und `height`). Ein
   Formatwechsel hätte mehr Änderungen in der App verlangt, als sich ohne iPhone testen lassen.
   Die Punkte unter „Auswirkungen auf die App“ zur Metadatei entfallen damit.
-- **Server ohne FastAPI.** Der Server ist in Module aufgeteilt (`calibration`, `captures`, `live`, `app`),
-  läuft aber weiter mit der Standardbibliothek. FastAPI bleibt offener Punkt 2.
+- **Server:** zuerst nur in Module aufgeteilt, danach in einem eigenen Commit auf FastAPI umgestellt
+  (offener Punkt 2 damit entschieden).
 - **Python als uv-Workspace.** `python/` ist ein Mitglied, der Projektordner der Workspace mit der
   gemeinsamen `.venv`. So startet die App den Server weiter über `.venv/bin/python`.
 - **Kein `legacy/`.** Der alte Code ist in der Git-Historie (`main`).

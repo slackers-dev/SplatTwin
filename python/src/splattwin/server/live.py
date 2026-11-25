@@ -1,10 +1,10 @@
 """Live-Tracking an Zuschauer weiterleiten: die Tracking-Seite schickt pro Bild die Gelenkpunkte
 (POST /api/live), Zuschauerseiten empfangen sie als Server-Sent Events (GET /api/live)."""
 
+import asyncio
 import json
-import threading
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator
 
 from splattwin import contracts
 
@@ -23,39 +23,49 @@ def parse_frame(body: bytes) -> bytes:
 
 class Live:
     """Letztes Bild des Trackers; Zuschauer warten auf das naechste (aeltere werden verworfen,
-    ein langsamer Zuschauer bekommt also nur weniger Bilder statt einer wachsenden Verzoegerung)."""
+    ein langsamer Zuschauer bekommt also nur weniger Bilder statt einer wachsenden Verzoegerung).
+
+    Jedes neue Bild setzt das aktuelle Event und legt ein frisches an: alle Zuschauer, die darauf
+    warten, wachen auf. close() beendet alle Streams, damit der Server ohne Abbruch herunterfaehrt."""
 
     def __init__(self):
-        self.cond = threading.Condition()
         self.seq = 0
         self.frame = b""
         self.time = 0.0
         self.viewers = 0
+        self.closed = False
+        self._changed = asyncio.Event()
+
+    def _wake(self) -> None:
+        self._changed.set()
+        self._changed = asyncio.Event()
 
     def publish(self, frame: bytes) -> int:
-        with self.cond:
-            self.seq += 1
-            self.frame = frame
-            self.time = time.monotonic()
-            self.cond.notify_all()
-            return self.viewers
+        self.seq += 1
+        self.frame = frame
+        self.time = time.monotonic()
+        self._wake()
+        return self.viewers
 
-    def stream(self, write: Callable[[bytes], None]) -> None:
-        with self.cond:
-            self.viewers += 1
-            seen = self.seq if time.monotonic() - self.time > STALE_SECONDS else self.seq - 1
+    def close(self) -> None:
+        self.closed = True
+        self._wake()
+
+    async def stream(self) -> AsyncIterator[bytes]:
+        """Ereignisse fuer einen Zuschauer, bis er die Verbindung schliesst oder der Server endet."""
+        self.viewers += 1
+        # Laeuft der Tracker gerade, bekommt ein neuer Zuschauer sofort das letzte Bild.
+        seen = self.seq if time.monotonic() - self.time > STALE_SECONDS else self.seq - 1
         try:
-            while True:
-                with self.cond:
-                    self.cond.wait_for(lambda last=seen: self.seq != last, timeout=PING_SECONDS)
-                    seq, frame = self.seq, self.frame
-                if seq == seen:
-                    write(b": ping\n\n")
+            while not self.closed:
+                if self.seq == seen:
+                    changed = self._changed
+                    try:
+                        await asyncio.wait_for(changed.wait(), PING_SECONDS)
+                    except asyncio.TimeoutError:
+                        yield b": ping\n\n"
                     continue
-                seen = seq
-                write(b"data: " + frame + b"\n\n")
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+                seen = self.seq
+                yield b"data: " + self.frame + b"\n\n"
         finally:
-            with self.cond:
-                self.viewers -= 1
+            self.viewers -= 1

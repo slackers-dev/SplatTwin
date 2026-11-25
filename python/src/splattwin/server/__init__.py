@@ -5,5 +5,5 @@ mit OpenCV, speichert Aufnahmen aus dem Browser und leitet das Live-Tracking an 
   captures     Aufnahme aus dem Browser speichern und nach MP4 mit festen 30 fps umwandeln
   live         letztes Bild des Trackers an alle Zuschauer (Server-Sent Events)
   network      Adressen im lokalen Netz
-  app          HTTP: Routen, Zugriffsschutz, statische Dateien
+  app          FastAPI: Routen, Zugriffsschutz, statische Dateien; API-Doku unter /api/docs
 """

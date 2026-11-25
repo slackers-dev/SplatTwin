@@ -10,7 +10,11 @@ requires-python = ">=3.10,<3.13"
 dependencies = ["splattwin[vision]"]
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = [
+    "httpx2>=2.14.0",
+    "pytest",
+    "ruff",
+]
 
 [tool.uv]
 package = false
