@@ -1,7 +1,7 @@
 # Splattwin-App für iPhone und Mac
 
 Zwei native Apps, die die Aufnahme für den Gaussian Splat steuern und das iPhone zur Kamera für das
-Live-Tracking machen. Anforderungen: [`../APP_ANFORDERUNGEN.md`](../APP_ANFORDERUNGEN.md), Stand der
+Live-Tracking machen. Anforderungen: [`../docs/app-anforderungen.md`](../docs/app-anforderungen.md), Stand der
 Umsetzung dort in Abschnitt 12.
 
 - **Splattwin Kamera** (iPhone): stellt die Kamera bereit, führt aus, was der Mac verlangt, zeigt gross

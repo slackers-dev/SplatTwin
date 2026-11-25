@@ -11,6 +11,13 @@ Thumbs.db
 venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+
+# --- Web ---
+node_modules/
+web/dist/
+web/.tsbuild/
 
 # --- Bilder & Videos ---
 *.mov
@@ -32,16 +39,13 @@ __pycache__/
 *.tif
 *.tiff
 *.exr
-# Ausnahme: Kalibrier-Schachbrett wird von der App gebraucht
-!/schachbrett.png
+# Ausnahme: Kalibrier-Schachbrett wird von der Tracking-Seite gebraucht
+!/web/public/schachbrett.png
 # Ausnahme: App-Icons der Mac- und iPhone-App
 !/app/*/Assets.xcassets/**/*.png
 
-# --- Splat-Pipeline: Daten, Ergebnisse, Tools ---
-splat/captures/
-splat/runs/
-splat/target/
-splat/tools/
+# --- Daten: Aufnahmen, Ergebnisse, Tools (siehe README) ---
+data/
 *.ply
 *.splat
 *.ksplat

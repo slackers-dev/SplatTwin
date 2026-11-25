@@ -5,7 +5,7 @@ Projekt im Modul CVAI: eine Person als Gaussian Splat aufnehmen und live per Kam
 - **Web-Seiten** (`index.html`, `capture.html`, `splat.html`, JS-Dateien, `server.py`): Tracking, Aufnahme, Splat-Viewer
 - **Splat-Pipeline** (`splat/`): Video → Einzelbilder → Masken → COLMAP → Brush → `splat.ply`
 - **Apps** (`app/`): Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md)
-- Anforderungen: [`APP_ANFORDERUNGEN.md`](APP_ANFORDERUNGEN.md)
+- Anforderungen: [`docs/app-anforderungen.md`](docs/app-anforderungen.md)
 
 ## Einrichten nach dem Klonen
 
