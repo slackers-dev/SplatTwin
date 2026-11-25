@@ -83,5 +83,6 @@ Der Pod kostet pro Stunde, also nur laufen lassen, solange er gebraucht wird.
 
 - ExAvatar Projektseite: https://mks0601.github.io/ExAvatar
 - ExAvatar Paper: https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/05715.pdf
+- ExAvatar auf arXiv: https://arxiv.org/abs/2407.21686
 - ExAvatar Code: https://github.com/mks0601/ExAvatar_RELEASE
 - 3DGS-Avatar Paper: https://openaccess.thecvf.com/content/CVPR2024/papers/Qian_3DGS-Avatar_Animatable_Avatars_via_Deformable_3D_Gaussian_Splatting_CVPR_2024_paper.pdf
