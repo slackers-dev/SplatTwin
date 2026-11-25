@@ -1,7 +1,3 @@
-# /// script
-# requires-python = ">=3.10,<3.13"
-# dependencies = ["numpy", "opencv-python-headless", "mediapipe", "rembg[cpu]"]
-# ///
 """Bestimmt die Gelenke der Person im Splat und schreibt sie nach rig.json.
 
 MediaPipe findet die Gelenke in allen Bildern, in denen die Person zur Kamera

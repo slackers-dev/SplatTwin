@@ -8,7 +8,7 @@ und berechnet daraus Kameramatrix und Linsenverzeichnung.
 Leitet ausserdem das Live-Tracking weiter: Die Tracking-Seite (index.html) schickt pro Bild
 die Gelenkpunkte an /api/live, Zuschauerseiten (live.html) empfangen sie als Server-Sent Events.
 
-Start:  .venv/bin/python server.py [port] [--lan]
+Start:  uv run server.py [port] [--lan]   (einmalig vorher: uv sync)
 
 Mit --lan ist der Server im lokalen Netz erreichbar, damit andere Geraete im WLAN zuschauen
 koennen. Geraete im Netz bekommen dann nur die Zuschauerseite und was sie braucht; senden,

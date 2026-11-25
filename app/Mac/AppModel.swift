@@ -810,7 +810,7 @@ final class AppModel: ObservableObject {
     func openPage(_ path: String) {
         Task {
             guard await ensureServer() else {
-                message = "server.py lässt sich nicht starten. Im Ordner projekt: .venv/bin/python server.py"
+                message = "server.py lässt sich nicht starten. Im Projektordner einmal «uv sync» ausführen, dann «uv run server.py» testen."
                 return
             }
             if let url = URL(string: "http://127.0.0.1:8931/\(path)") { NSWorkspace.shared.open(url) }

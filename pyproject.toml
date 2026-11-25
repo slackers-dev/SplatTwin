@@ -1,0 +1,17 @@
+[project]
+name = "splattwin"
+version = "0.1.0"
+description = "Person als Gaussian Splat aufnehmen und live per Kamera-Tracking bewegen (Modul CVAI)"
+readme = "README.md"
+# mediapipe gibt es nur bis Python 3.12
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "mediapipe",
+    "rembg[cpu]",
+]
+
+[tool.uv]
+# Kein installierbares Paket, nur eine Umgebung fuer server.py und die Skripte in splat/.
+package = false

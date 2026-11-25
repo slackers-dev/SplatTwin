@@ -1,7 +1,3 @@
-# /// script
-# requires-python = ">=3.10,<3.13"
-# dependencies = ["numpy", "opencv-python-headless", "mediapipe", "rembg[cpu]"]
-# ///
 """Setzt einen Kopf-Splat (Nahaufnahme) auf einen Koerper-Splat.
 
 Beide Splats stammen aus getrennten Rekonstruktionen und haben darum verschiedene

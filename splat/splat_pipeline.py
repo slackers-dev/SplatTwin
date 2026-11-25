@@ -1,11 +1,3 @@
-# /// script
-# requires-python = ">=3.10,<3.13"
-# dependencies = [
-#   "numpy",
-#   "opencv-python-headless",
-#   "rembg[cpu]",
-# ]
-# ///
 """Video einer sich drehenden Person -> Gaussian Splat (.ply).
 
 Aufbau: Handy steht fest, die Person dreht sich an Ort. Weil der Hintergrund
