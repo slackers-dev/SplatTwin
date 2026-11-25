@@ -38,7 +38,12 @@ def links(run: str) -> str:
 
 def run(name_or_path: str) -> None:
     meta_path = capture_path(name_or_path)
-    meta = contracts.read(meta_path, "capture")
+    if not meta_path.exists():
+        sys.exit(f"Aufnahme nicht gefunden: {meta_path}")
+    try:
+        meta = contracts.read(meta_path, "capture")
+    except contracts.ContractError as err:
+        sys.exit(f"Metadatei der Aufnahme ungueltig: {err}")
     marks, name = meta["marks"], meta["name"]
     video = meta_path.parent / meta["saved"]["a"]["saved"]
     body, head = RUNS / name, RUNS / f"{name}_kopf"
