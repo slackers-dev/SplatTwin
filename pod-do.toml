@@ -6,6 +6,9 @@ project = "splattwin"
 [env.lhm]
 image = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04"
 min_vram = 8
+# torch 2.3 kennt Blackwell (RTX 50xx, PRO 6000) noch nicht: nur Ampere, Ada, Hopper
+gpus = ["NVIDIA RTX 2000 Ada Generation", "NVIDIA RTX A4500", "NVIDIA RTX A4000", "NVIDIA RTX 4000 Ada Generation",
+        "NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA A40", "NVIDIA GeForce RTX 4090"]
 cuda = "12.1"
 disk = 80
 boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git libgl1 libglib2.0-0 ffmpeg >/dev/null"
