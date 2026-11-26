@@ -5,6 +5,8 @@
 #
 # Erwartet: Pod-Vorlage mit CUDA 12.1 (devel, mit nvcc), z. B. "RunPod PyTorch 2.x CUDA 12.1".
 # Versionen wie im README von LHM++: Python 3.10, torch 2.3.0, CUDA 12.1.
+#
+# NOCH NICHT GETESTET auf einem echten Pod (Stand 26.11.2026). Siehe scripts/runpod/README.md.
 set -euo pipefail
 
 WS="${WORKSPACE:-/workspace}"

@@ -6,7 +6,8 @@ einem gemieteten Pod bei [RunPod](https://www.runpod.io). Gearbeitet wird vom Ma
 rechnen und die Datei zurückholen erledigt ein Befehl. Hintergrund in
 [Entscheidung 0007](../../project-documentation/entscheidungen/0007-avatar-weg.md).
 
-> Stand: gebaut, aber noch nicht auf einem echten Pod ausprobiert. Beim ersten `make lhm-setup` kann
+> **Noch nicht getestet** (Stand 26.11.2026): gebaut, aber noch nicht auf einem echten Pod ausprobiert.
+> Nur der Ablauf auf dem Mac ist mit einem nachgebauten ssh durchgespielt. Beim ersten `make lhm-setup` kann
 > es nötig sein, Versionen nachzubessern.
 
 ## Einmal einrichten

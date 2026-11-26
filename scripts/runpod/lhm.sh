@@ -7,6 +7,8 @@
 #   lhm.sh ssh                   Shell auf dem Pod
 #
 # Verbindung steht in scripts/runpod/pod.env (nicht im Repo, Vorlage pod.env.example).
+#
+# NOCH NICHT GETESTET auf einem echten Pod (Stand 26.11.2026). Siehe scripts/runpod/README.md.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
