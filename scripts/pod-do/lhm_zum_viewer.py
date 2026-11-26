@@ -17,7 +17,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-
 from splattwin.io.ply import read_ply
 from splattwin.vision.landmarks import detect, pose_landmarker
 
