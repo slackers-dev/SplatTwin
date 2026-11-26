@@ -31,3 +31,4 @@ python scripts/inference/to_gs_ply.py \
   --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
 '''
 download = { "out" = "data/lhm/{name}" }
+after = "uv run python scripts/pod-do/lhm_zum_viewer.py \"$NAME\""   # -> viewer.html?run=lhm-<name>
