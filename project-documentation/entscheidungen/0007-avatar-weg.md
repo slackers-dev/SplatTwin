@@ -20,7 +20,12 @@ Gesicht. Training auf einer gemieteten GPU (RunPod, 24 GB oder mehr).
 
 - **Beim heutigen Weg bleiben:** läuft auf dem Mac, aber nur mit starren Aufnahmen scharf, keine Mimik.
 - **3DGS-Avatar** (CVPR 2024): einfacher, nur Körper (SMPL), Posen von einem anderen Werkzeug.
-- **LHM** (ICCV 2025): ein Foto genügt, Ergebnis in Sekunden. Rückseite und Details nur geschätzt.
+- **LHM** (ICCV 2025, Code offen, Apache-2.0): genau ein Foto, Ergebnis in Sekunden. Rückseite und
+  Details nur geschätzt. Stand README, 26.11.2026, nicht ausprobiert:
+  - «bewegbar» nur in der eigenen Pipeline: `inference.sh` rendert aus Foto und SMPL-X-Posen ein Video
+  - `inference_mesh.sh` exportiert den Avatar nur in einer Grundpose, ohne Skelett und Gewichte
+  - braucht Linux mit CUDA und eine GPU mit 14 bis 24 GB; läuft nicht auf dem Mac
+  - gegenüber LHM++ für uns schlechter: nur ein Foto, grössere GPU, gleicher Aufwand beim Skinning
 - **LHM++** (2025, Nachfolger von LHM, Code seit März 2026 offen, Apache-2.0): ein oder mehrere Fotos
   ohne Kamerapositionen, bewegbarer Avatar an SMPL-X in etwa 1 s (8 Fotos: 1,3 s). Kein Training pro
   Person. Gut als schneller erster Test auf dem Pod (Stand README, 26.11.2026, nicht ausprobiert):
@@ -35,6 +40,12 @@ Gesicht. Training auf einer gemieteten GPU (RunPod, 24 GB oder mehr).
     Drehbuch)
   - lädt die SMPL-X-Modelldateien automatisch mit; deren Lizenz gilt trotzdem. Kein Training-Code.
 - **HumanGS** (2026): wenige Kamerabilder mit SMPL-X-Posen, passt zum Aufbau mit mehreren Handys.
+
+Bei allen drei Wegen (ExAvatar, LHM, LHM++) gibt es kein fertig geriggtes Modell für den Browser. Die
+Gaussians liegen in der Grundpose von SMPL-X. Selbst zu bauen sind deshalb immer: jedem Gaussian die
+Gewichte des nächsten SMPL-X-Punkts geben und in Spark pro Bild verformen, und das Live-Tracking so
+umbauen, dass es SMPL-X-Posen liefert. Ohne eigene GPU lassen sich LHM und LHM++ vorab in ihren
+Online-Demos auf Hugging Face ausprobieren (Fotos gehen dabei an einen fremden Dienst).
 
 ## Folgen, falls angenommen
 
@@ -55,6 +66,6 @@ Gesicht. Training auf einer gemieteten GPU (RunPod, 24 GB oder mehr).
 
 - [`docs/notizen-smpl-avatar.md`](../../docs/notizen-smpl-avatar.md)
 - ExAvatar: https://mks0601.github.io/ExAvatar, https://arxiv.org/abs/2407.21686
-- LHM: https://arxiv.org/abs/2503.10625
+- LHM: https://github.com/aigc3d/LHM, https://arxiv.org/abs/2503.10625
 - LHM++: https://github.com/aigc3d/LHM-plusplus, https://arxiv.org/abs/2506.13766
 - HumanGS: https://arxiv.org/abs/2604.10259
