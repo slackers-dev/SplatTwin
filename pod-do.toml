@@ -26,6 +26,8 @@ n=$(ls images | wc -l)
 views=$(( n > 16 ? 16 : n ))
 mkdir -p out
 cd "$POD_DO_ENV/LHM-plusplus" && source .venv/bin/activate
-python scripts/inference/to_gs_ply.py --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
+python scripts/inference/to_gs_ply.py \
+  --model_name LHMPP-700M-PixelShuffle --model_path ./pretrained_models/LHMPP-700M-PixelShuffle \
+  --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
 '''
 download = { "out" = "data/lhm/{name}" }
