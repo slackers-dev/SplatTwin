@@ -5,6 +5,8 @@ project = "splattwin"
 # LHM++: Avatar als Gaussian Splat auf SMPL-X aus wenigen Fotos. Braucht etwa 8 GB VRAM.
 [env.lhm]
 image = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04"
+# Fertige Umgebung als privates Image (pod-do image lhm). Ohne Registry-Zugang: Archiv auf dem Volume.
+docker = "ghcr.io/slackers-dev/splattwin-lhm"
 min_vram = 8
 # torch 2.3 kennt Blackwell (RTX 50xx, PRO 6000) noch nicht: nur Ampere, Ada, Hopper
 gpus = ["NVIDIA RTX 2000 Ada Generation", "NVIDIA RTX A4500", "NVIDIA RTX A4000", "NVIDIA RTX 4000 Ada Generation",

@@ -49,6 +49,21 @@ Umgebung als Archiv (14 GB) auf dem Volume, und ein neuer Pod holt sie in etwa 2
 gleiches Licht, ganze Person im Bild, Hände gut sichtbar, mindestens eines mit ausgebreiteten Armen
 (A-Pose wie in [`docs/drehbuch-brush.md`](../../docs/drehbuch-brush.md)).
 
+## Als Docker-Image (optional)
+
+`pod-do.toml` nennt für LHM++ ein privates Image `ghcr.io/slackers-dev/splattwin-lhm:<setup-hash>`. Ist der
+Zugang eingerichtet, baut pod-do es einmal auf dem Pod und startet danach jeden Pod direkt daraus. Ohne
+Zugang läuft alles wie bisher über das Archiv auf dem Volume. Einrichten (einmal pro Rechner, Details im
+README von pod-do):
+
+```sh
+pod-do registry login ghcr.io --user <github-name>   # Token mit write:packages und read:packages
+pod-do registry runpod                               # dieselben Zugangsdaten bei RunPod (oder in der Konsole)
+pod-do image lhm                                     # bauen und hochladen, etwa 10 bis 15 Minuten
+```
+
+Das Image enthält Modelle mit Forschungslizenz (SMPL-X): **privat lassen**.
+
 ## Nützlich
 
 ```sh

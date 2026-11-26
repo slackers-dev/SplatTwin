@@ -14,6 +14,11 @@ Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 - LHM-Avatare bewegen sich über ihr SMPL-X-Skelett statt über den Roboter: `lhm_export.py` schreibt auf
   dem Pod die Gewichte von LHM++ mit, `smplx-avatar.ts` verformt damit im Browser. Neuer Vertrag
   `run-smplx`. Getestet mit einer alten Drehaufnahme (`tracking.html?run=lhm-scan1232&src=...`).
+- Recherche: Avatar mit generativer KI verfeinern. Vorschlag in Entscheidung 0009 (offen), Notizen in
+  [`docs/notizen-genai-verfeinerung.md`](../docs/notizen-genai-verfeinerung.md).
+- pod-do kann die eingerichtete Umgebung als Docker-Image in einer Registry ablegen (`docker` in
+  `pod-do.toml`, für LHM++ `ghcr.io/slackers-dev/splattwin-lhm`). Neue Pods starten dann direkt daraus.
+  Braucht einen GitHub-Token mit `write:packages` (noch nicht eingerichtet).
 
 ## 25.11.2026: Neuaufbau, Bühne, Drehbücher
 
