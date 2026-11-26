@@ -13,6 +13,7 @@ Wahrheit:**
 | `capture.schema.json` | `data/captures/<name>.json` | `capture.html`, Mac-App | `splattwin process` |
 | `run-splat.schema.json` | `data/runs/<lauf>/splat.json` | Pipeline (Ausrichtung) | Viewer, Avatar, Rig |
 | `run-rig.schema.json` | `data/runs/<lauf>/rig.json` | Pipeline (Rig) | Splat-Avatar |
+| `run-smplx.schema.json` | `data/runs/<lauf>/smplx.json` (+ `smplx_skin.bin`) | `scripts/pod-do/lhm_zum_viewer.py` | Splat-Avatar |
 | `intrinsics.schema.json` | `POST /api/calibrate`, App-Kameras | Server, App-Brücke | Tracking |
 | `live-frame.schema.json` | `/ws/send`, `/ws/stage`, binär (`web/src/live/protocol.ts`) | Tracking-Seite | Bühne, Regie |
 | `stage-meta.schema.json` | `/ws/send`, `/ws/stage`, `data/stage/seats.json` | Tracking-Seite | Bühne, Regie |
@@ -29,6 +30,8 @@ data/runs/<lauf>/
   splat.ply          Gaussian Splat in COLMAP-Koordinaten (wie Brush ihn schreibt)
   splat.json         Ausrichtung COLMAP -> Welt                     (run-splat)
   rig.json           Gelenke der Person in Weltkoordinaten          (run-rig)
+  smplx.json         SMPL-X-Skelett eines LHM-Avatars                (run-smplx)
+  smplx_skin.bin     Gewichte jedes Klecks an den SMPL-X-Gelenken (Format in run-smplx)
   skin.bin           Splat schon aufs Skelett gelegt, von der Tracking-Seite vorgerechnet (web/src/avatar/skin-cache.ts)
   splat_koerper.ply  Körper-Splat vor dem Aufsetzen des Kopfs (nur nach merge-head)
   head.json          Bericht von merge-head (nicht Teil des Vertrags)

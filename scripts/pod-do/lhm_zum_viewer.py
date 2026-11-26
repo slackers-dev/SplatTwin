@@ -2,8 +2,10 @@
 
 LHM++ liefert die T-Pose auf SMPL-X: Meter, y oben, Blick nach +z. Dazu kommen:
 - splat.json: nur eine Verschiebung, damit die Fuesse bei y = 0 stehen (Vertrag run-splat)
-- rig.json: Gelenke fuer den Splat-Avatar. Der Splat wird von vorne gerendert, MediaPipe findet die
-  Gelenke im Bild, die Tiefe kommt aus den Gaussians an dieser Stelle (Mitte zwischen vorne und hinten).
+- smplx.json + smplx_skin.bin: SMPL-X-Skelett und die Gewichte jedes Gaussians (aus skin.npz, das
+  lhm_export.py auf dem Pod schreibt). Damit verformt der Splat-Avatar wie LHM++ selbst.
+- rig.json: Gelenke fuer den alten Weg ueber das Roboter-Skelett. Der Splat wird von vorne gerendert,
+  MediaPipe findet die Gelenke im Bild, die Tiefe kommt aus den Gaussians an dieser Stelle.
 
 Laeuft lokal als `after` von pod-do (siehe pod-do.toml).
 
@@ -17,6 +19,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from splattwin import contracts
 from splattwin.io.ply import read_ply
 from splattwin.vision.landmarks import detect, pose_landmarker
 
@@ -66,12 +69,38 @@ def joints_from_render(
     return out
 
 
+def write_smplx(skin: Path, out: Path, feet: float, count: int) -> None:
+    """smplx.json (Vertrag run-smplx) und smplx_skin.bin: pro Klecks die 4 staerksten Gelenke."""
+    d = np.load(skin)
+    w = d["weights"].astype(np.float32)
+    if len(w) != count:
+        raise SystemExit(f"skin.npz hat {len(w)} Gewichte, splat.ply {count} Kleckse")
+    idx = np.argsort(-w, axis=1)[:, :4]
+    top = np.take_along_axis(w, idx, axis=1).clip(0)
+    top /= top.sum(1, keepdims=True)
+    w8 = np.round(top * 255).astype(np.uint8)
+    (out / "smplx_skin.bin").write_bytes(idx.astype(np.uint8).tobytes() + w8.tobytes())
+    joints = d["joints"] + np.array([0, -feet, 0])
+    meta = {
+        "joints": [[round(float(c), 5) for c in p] for p in joints],
+        "parents": [int(p) for p in d["parents"]],
+        "count": count,
+    }
+    contracts.validate("run-smplx", meta)
+    (out / "smplx.json").write_text(json.dumps(meta))
+    print(
+        f"SMPL-X: {count} Kleckse, Anteil der 4 staerksten Gelenke im Mittel {w[np.arange(count)[:, None], idx].sum(1).mean():.3f}"
+    )
+
+
 def main() -> None:
     name = sys.argv[1]
     src = ROOT / "data" / "lhm" / name / "avatar.ply"
     out = ROOT / "data" / "runs" / f"lhm-{name}"
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy(src, out / "splat.ply")
+    # skin.bin (alter Weg, von der Tracking-Seite vorgerechnet) passt nicht mehr zum neuen PLY
+    (out / "skin.bin").unlink(missing_ok=True)
 
     _, props, table = read_ply(src)
     col = {p: i for i, p in enumerate(props)}
@@ -85,6 +114,12 @@ def main() -> None:
     (out / "splat.json").write_text(
         json.dumps({"matrix": matrix, "height": round(top - feet, 3)}, indent=2)
     )
+
+    skin = ROOT / "data" / "lhm" / name / "skin.npz"
+    if skin.exists():
+        write_smplx(skin, out, feet, len(xyz))
+    else:
+        print("Kein skin.npz: nur der alte Weg ueber das Roboter-Skelett")
 
     img, x0, y1 = render_front(xyz[keep], rgb[keep])
     joints = joints_from_render(xyz[keep], img, x0, y1)

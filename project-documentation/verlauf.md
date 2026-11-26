@@ -11,6 +11,9 @@ Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 - Erster echter Lauf auf einer L4: LHM++ erzeugt aus den 8 Beispielbildern ein T-Pose-PLY (160 000
   Gaussians). Unterwegs behoben: PATH für nvcc in SSH-Sitzungen, Paketquellen, chumpy, flash-attn (ohne
   über 24 GB Speicher), fester Modellpfad.
+- LHM-Avatare bewegen sich über ihr SMPL-X-Skelett statt über den Roboter: `lhm_export.py` schreibt auf
+  dem Pod die Gewichte von LHM++ mit, `smplx-avatar.ts` verformt damit im Browser. Neuer Vertrag
+  `run-smplx`. Getestet mit einer alten Drehaufnahme (`tracking.html?run=lhm-scan1232&src=...`).
 
 ## 25.11.2026: Neuaufbau, Bühne, Drehbücher
 

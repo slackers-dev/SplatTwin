@@ -160,6 +160,142 @@ export interface RunRig {
 }
 
 /**
+ * data/runs/<lauf>/smplx.json: SMPL-X-Skelett eines Avatars von LHM++, in Weltkoordinaten (siehe run-splat, Füsse bei y = 0). Die Gewichte stehen daneben in smplx_skin.bin: count x 4 Gelenk-Indizes (uint8), danach count x 4 Gewichte (uint8, 0 bis 255, Summe etwa 255), in der Reihenfolge der Kleckse in splat.ply. Schreiben: scripts/pod-do/lhm_zum_viewer.py. Lesen: Splat-Avatar.
+ */
+export interface RunSmplx {
+  /**
+   * Die 55 Gelenke von SMPL-X in der Haltung von splat.ply (Becken, Hüften, Wirbelsäule, Knie, ..., Hände).
+   *
+   * @minItems 55
+   * @maxItems 55
+   */
+  joints: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number]
+  ];
+  /**
+   * Elterngelenk jedes Gelenks, -1 für das Becken.
+   *
+   * @minItems 55
+   * @maxItems 55
+   */
+  parents: [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ];
+  /**
+   * Anzahl Kleckse in splat.ply und smplx_skin.bin.
+   */
+  count: number;
+}
+
+/**
  * data/runs/<lauf>/splat.json: bildet die Koordinaten von splat.ply (COLMAP) auf die Welt ab. Welt: Meter, y oben, Füsse bei y = 0, Person schaut nach +z. Schreiben: Pipeline (align). Lesen: Viewer, Avatar, Rig, merge-head.
  */
 export interface RunSplat {

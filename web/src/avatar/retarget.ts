@@ -59,6 +59,8 @@ export class Retargeter {
   readonly bones: Bones;
   /** Nur Oberkoerper: Huefte und Beine werden nicht getrackt, sondern bleiben in lowerPose. */
   upperBodyOnly = false;
+  /** Weitere Skelette, die bei jedem apply dieselben Punkte bekommen (z. B. SMPL-X unter einem Splat). */
+  readonly followers: Retargeter[] = [];
   private lowerPose: [THREE.Bone, THREE.Quaternion][] | null = null;
   private readonly rest = new Map<THREE.Bone, { local: THREE.Quaternion; world: THREE.Quaternion }>();
   private readonly restBasisInv: THREE.Quaternion;
@@ -215,5 +217,10 @@ export class Retargeter {
 
     // Tiefster Fuss bleibt auf dem Boden.
     this.model.position.y = this.restFootY - this.lowestFoot();
+
+    for (const f of this.followers) {
+      f.upperBodyOnly = upper;
+      f.apply(P, hands);
+    }
   }
 }

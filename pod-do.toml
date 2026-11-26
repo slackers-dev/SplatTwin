@@ -20,13 +20,14 @@ env = "lhm"
 args = ["fotos", "name?"]
 defaults = { name = "{fotos.name}" }
 before = "bash scripts/pod-do/fotos-vorbereiten.sh"
-upload = { "images" = "data/lhm/{name}/fotos" }
+upload = { "images" = "data/lhm/{name}/fotos", "lhm_export.py" = "scripts/pod-do/lhm_export.py" }
 run = '''
 n=$(ls images | wc -l)
 views=$(( n > 16 ? 16 : n ))
 mkdir -p out
 cd "$POD_DO_ENV/LHM-plusplus" && source .venv/bin/activate
-python scripts/inference/to_gs_ply.py \
+# wie to_gs_ply.py, schreibt zusaetzlich out/skin.npz (SMPL-X-Gewichte)
+python "$JOB/lhm_export.py" \
   --model_name LHMPP-700M-PixelShuffle --model_path ./pretrained_models/LHMPP-700M-PixelShuffle \
   --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
 '''
