@@ -2,6 +2,13 @@
 
 Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 
+## 26.11.2026: LHM++ geprüft
+
+- Code von LHM++ ist offen und nimmt mehrere Fotos: als Alternative in Entscheidung
+  [0007](entscheidungen/0007-avatar-weg.md) eingetragen
+- LHM, LHM++ und ExAvatar liefern kein fertig geriggtes Modell: Skinning an SMPL-X in Spark und
+  SMPL-X-Posen aus dem Tracking sind bei allen Wegen selbst zu bauen
+
 ## 25.11.2026: Neuaufbau, Bühne, Drehbücher
 
 - Projektstruktur neu aufgebaut und nach `main` gemerged (PR #1). Begründung in
