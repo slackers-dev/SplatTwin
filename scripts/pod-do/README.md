@@ -28,8 +28,9 @@ pod-do down                                      # Pod gleich weg, sonst nach 20
 
 Ergebnis: `data/lhm/<name>/avatar.ply` (T-Pose, SMPL-X). Die aufbereiteten Fotos liegen daneben in
 `data/lhm/<name>/fotos/`. Fotos als JPG, PNG oder HEIC, höchstens 16. Danach kopiert
-`lhm_zum_viewer.py` den Avatar nach `data/runs/lhm-<name>/` und stellt ihn auf den Boden. Ansehen mit
-`viewer.html?run=lhm-<name>`.
+`lhm_zum_viewer.py` den Avatar nach `data/runs/lhm-<name>/`, stellt ihn auf den Boden und bestimmt die
+Gelenke (`rig.json`, aus einem Render von vorne mit MediaPipe, Kontrolle in `rig_render.jpg`). Ansehen mit
+`viewer.html?run=lhm-<name>`, bewegen mit `tracking.html?run=lhm-<name>`.
 
 Fotos aus einer Drehaufnahme: etwa jedes 15. Bild aus `data/runs/<lauf>/frames/` nehmen, 8 Stück reichen.
 
