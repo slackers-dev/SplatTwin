@@ -1,0 +1,28 @@
+# Rechnen auf einer gemieteten GPU bei RunPod, mit pod-do (https://github.com/slackers-dev/pod-do).
+# Einrichten und Befehle: scripts/pod-do/README.md
+project = "splattwin"
+
+# LHM++: Avatar als Gaussian Splat auf SMPL-X aus wenigen Fotos. Braucht etwa 8 GB VRAM.
+[env.lhm]
+image = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04"
+min_vram = 8
+cuda = "12.1"
+disk = 80
+boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git libgl1 libglib2.0-0 ffmpeg >/dev/null"
+setup_file = "scripts/pod-do/setup-lhm.sh"
+vars = { PYTHONUNBUFFERED = "1" }
+
+[task.lhm]
+env = "lhm"
+args = ["fotos", "name?"]
+defaults = { name = "{fotos.name}" }
+before = "bash scripts/pod-do/fotos-vorbereiten.sh"
+upload = { "images" = "data/lhm/{name}/fotos" }
+run = '''
+n=$(ls images | wc -l)
+views=$(( n > 16 ? 16 : n ))
+mkdir -p out
+cd "$POD_DO_ENV/LHM-plusplus" && source .venv/bin/activate
+python scripts/inference/to_gs_ply.py --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
+'''
+download = { "out" = "data/lhm/{name}" }

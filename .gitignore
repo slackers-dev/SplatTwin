@@ -51,9 +51,6 @@ data/
 *.ksplat
 *.task
 
-# --- RunPod: Verbindung zum Pod ---
-scripts/runpod/pod.env
-
 # --- Xcode / Swift ---
 app/build/
 app/Kit/.build/

@@ -2,6 +2,13 @@
 
 Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 
+## 26.11.2026: LHM++ auf RunPod, Werkzeug pod-do
+
+- LHM++ als erster Test für den Avatar-Weg auf SMPL-X (Entscheidung 0007), gerechnet auf RunPod
+- Eigenes Werkzeug [pod-do](https://github.com/slackers-dev/pod-do) für GPU-Aufgaben, auch für andere
+  Projekte. Begründung in Entscheidung 0008. Aufgaben in `pod-do.toml`, Anleitung in
+  [`scripts/pod-do/README.md`](../scripts/pod-do/README.md). Auf einem echten Pod noch nicht getestet.
+
 ## 25.11.2026: Neuaufbau, Bühne, Drehbücher
 
 - Projektstruktur neu aufgebaut und nach `main` gemerged (PR #1). Begründung in

@@ -79,7 +79,8 @@ make lhm FOTOS=<ordner mit fotos>
 ```
 
 Rechnet auf einem gemieteten GPU-Pod einen Avatar auf SMPL-X, Ergebnis in `data/lhm/<name>/avatar.ply`.
-**Noch nicht auf einem echten Pod getestet.** Einrichten und Hinweise: [`scripts/runpod/README.md`](scripts/runpod/README.md).
+Den Pod bedient [pod-do](https://github.com/slackers-dev/pod-do), die Aufgaben stehen in `pod-do.toml`.
+**Noch nicht auf einem echten Pod getestet.** Einrichten und Hinweise: [`scripts/pod-do/README.md`](scripts/pod-do/README.md).
 
 ### Live-Präsentation (Bühne)
 
