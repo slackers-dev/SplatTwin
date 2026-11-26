@@ -7,7 +7,7 @@
 # Versionen wie im README von LHM++: Python 3.10, torch 2.3.0, CUDA 12.1. Das Image muss CUDA-devel
 # (nvcc) haben, sonst lassen sich die Erweiterungen nicht bauen.
 #
-# NOCH NICHT GETESTET auf einem echten Pod (Stand 26.11.2026).
+# Getestet am 26.11.2026 auf einer L4 (Image unten, Host-CUDA 13.2).
 set -euo pipefail
 
 step() { printf '\n==> %s\n' "$*"; }

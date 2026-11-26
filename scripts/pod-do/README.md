@@ -6,8 +6,8 @@ Was eine Nvidia-GPU braucht (zuerst LHM++, später ExAvatar), rechnet ein gemiet
 rechnet und holt das Ergebnis. Die Aufgaben stehen in [`pod-do.toml`](../../pod-do.toml).
 Hintergrund in [Entscheidung 0008](../../project-documentation/entscheidungen/0008-gpu-runner-pod-do.md).
 
-> **Noch nicht getestet** (Stand 26.11.2026): pod-do ist gegen einen lokalen Container getestet, LHM++ auf
-> einem echten Pod noch nicht. Beim ersten Lauf kann es nötig sein, Versionen in `setup-lhm.sh` nachzubessern.
+> **Getestet am 26.11.2026** auf einer L4 mit den Beispielbildern von LHM++: Ergebnis-PLY mit 160 000
+> Gaussians. Von null (neuer Pod) bis zum Ergebnis gut 5 Minuten, davon etwa 1 Minute rechnen, rund 6 Rappen.
 
 ## Einmal einrichten
 
@@ -29,8 +29,11 @@ pod-do down                                      # Pod gleich weg, sonst nach 20
 Ergebnis: `data/lhm/<name>/avatar.ply` (T-Pose, SMPL-X). Die aufbereiteten Fotos liegen daneben in
 `data/lhm/<name>/fotos/`. Fotos als JPG, PNG oder HEIC, höchstens 16.
 
-**Der erste Lauf dauert 20 bis 40 Minuten**: LHM++ installieren, CUDA-Erweiterungen bauen, Modelle laden,
-Probelauf. Danach liegt alles als Archiv auf dem Volume, und jeder neue Pod ist in wenigen Minuten bereit.
+**Das Einrichten** (LHM++ installieren, CUDA-Erweiterungen bauen, 13 GB Modelle laden, Probelauf) dauert
+etwa 25 Minuten und läuft nur einmal, oder wenn sich `setup-lhm.sh` oder `image` ändert. Danach liegt die
+Umgebung als Archiv (14 GB) auf dem Volume, und ein neuer Pod holt sie in etwa 2 Minuten.
+
+**API-Schlüssel:** pod-do liest ihn auch aus `POD_API_KEY` in der `.env` im Projekt (steht in `.gitignore`).
 
 **Gute Fotos** (laut LHM++): 4 bis 8 Stück rundherum (vorne, Seiten, hinten, schräg), hoch aufgelöst,
 gleiches Licht, ganze Person im Bild, Hände gut sichtbar, mindestens eines mit ausgebreiteten Armen
@@ -50,6 +53,10 @@ pod-do gpus --min-vram 8
 - **`nvcc fehlt` oder Fehler beim Bauen von `pointops`, `diff-gaussian-rasterization`:** Image ohne
   CUDA-devel oder mit anderer CUDA-Version. `image` in `pod-do.toml` prüfen.
 - **Neu einrichten:** Jede Änderung an `setup-lhm.sh` oder `image` richtet beim nächsten Lauf neu ein.
+- **`CUDA out of memory` schon bei wenigen Fotos:** flash-attn fehlt. Ohne braucht der Sonata-Encoder mehr
+  als 24 GB statt etwa 8 GB.
+- **Modell-Download scheitert (401 bei Hugging Face, 403 bei ModelScope):** Das Modell liegt nur auf ModelScope,
+  das bei vielen Anfragen drosselt. Später nochmals versuchen.
 - **Keine GPU frei:** `pod-do gpus` zeigt, was es gibt, `make lhm ... ` mit
   `pod-do run lhm <fotos> --gpu "NVIDIA A40"` ersetzen.
 

@@ -7,7 +7,10 @@ Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 - LHM++ als erster Test für den Avatar-Weg auf SMPL-X (Entscheidung 0007), gerechnet auf RunPod
 - Eigenes Werkzeug [pod-do](https://github.com/slackers-dev/pod-do) für GPU-Aufgaben, auch für andere
   Projekte. Begründung in Entscheidung 0008. Aufgaben in `pod-do.toml`, Anleitung in
-  [`scripts/pod-do/README.md`](../scripts/pod-do/README.md). Auf einem echten Pod noch nicht getestet.
+  [`scripts/pod-do/README.md`](../scripts/pod-do/README.md).
+- Erster echter Lauf auf einer L4: LHM++ erzeugt aus den 8 Beispielbildern ein T-Pose-PLY (160 000
+  Gaussians). Unterwegs behoben: PATH für nvcc in SSH-Sitzungen, Paketquellen, chumpy, flash-attn (ohne
+  über 24 GB Speicher), fester Modellpfad.
 
 ## 25.11.2026: Neuaufbau, Bühne, Drehbücher
 

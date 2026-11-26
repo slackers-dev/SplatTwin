@@ -34,7 +34,8 @@ den Pod bei Leerlauf.
 - Wer Aufgaben auf RunPod rechnen will, installiert pod-do und braucht einen eigenen API-Schlüssel.
 - Global Volumes kennen keine Dateirechte, kein atomares Umbenennen und keine Dateisperren. Darum liegt die
   Umgebung samt Modellen als Archiv dort und wird auf die lokale Disk des Pods entpackt.
-- pod-do ist noch nicht gegen das echte RunPod getestet, nur gegen einen lokalen Container mit SSH.
+- Am 26.11.2026 auf RunPod getestet: LHM++ einmal eingerichtet (etwa 25 Minuten), danach auf einem
+  frischen Pod von null bis zum Ergebnis gut 5 Minuten.
 
 ## Quellen
 
