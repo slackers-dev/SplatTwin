@@ -72,6 +72,15 @@ Ergebnis in `data/runs/video/`, ansehen mit `viewer.html?run=video`, als Avatar 
 Eine Aufnahme aus `capture.html` oder der App rechnet `uv run splattwin process <name>` in einem Schritt
 (Splat, Kopf, Gelenke). Hinweise für gute Aufnahmen: [`docs/notizen-smpl-avatar.md`](docs/notizen-smpl-avatar.md).
 
+### Avatar aus Fotos mit LHM++ (Versuch, RunPod)
+
+```sh
+make lhm FOTOS=<ordner mit fotos>
+```
+
+Rechnet auf einem gemieteten GPU-Pod einen Avatar auf SMPL-X, Ergebnis in `data/lhm/<name>/avatar.ply`.
+Einrichten und Hinweise: [`scripts/runpod/README.md`](scripts/runpod/README.md).
+
 ### Live-Präsentation (Bühne)
 
 Zwei Presenter als Splat (oder Roboter) und die Folien in einem 3D-Raum, live für alle Zuschauer im
