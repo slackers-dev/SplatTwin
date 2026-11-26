@@ -25,7 +25,9 @@ def main() -> None:
     pos = read_positions(src)
     feet, top = float(pos[:, 1].min()), float(pos[:, 1].max())
     matrix = [[1, 0, 0, 0], [0, 1, 0, -feet], [0, 0, 1, 0], [0, 0, 0, 1]]
-    (out / "splat.json").write_text(json.dumps({"matrix": matrix, "height": round(top - feet, 3)}, indent=2))
+    (out / "splat.json").write_text(
+        json.dumps({"matrix": matrix, "height": round(top - feet, 3)}, indent=2)
+    )
     print(f"Viewer: viewer.html?run=lhm-{name} (Groesse {top - feet:.2f} m)")
 
 

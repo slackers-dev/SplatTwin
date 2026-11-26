@@ -58,3 +58,6 @@ app/Kit/.swiftpm/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcuserdata/
 DerivedData/
+
+# --- Geheimnisse (z. B. POD_API_KEY fuer pod-do) ---
+.env

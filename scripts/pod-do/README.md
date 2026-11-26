@@ -27,7 +27,11 @@ pod-do down                                      # Pod gleich weg, sonst nach 20
 ```
 
 Ergebnis: `data/lhm/<name>/avatar.ply` (T-Pose, SMPL-X). Die aufbereiteten Fotos liegen daneben in
-`data/lhm/<name>/fotos/`. Fotos als JPG, PNG oder HEIC, höchstens 16.
+`data/lhm/<name>/fotos/`. Fotos als JPG, PNG oder HEIC, höchstens 16. Danach kopiert
+`lhm_zum_viewer.py` den Avatar nach `data/runs/lhm-<name>/` und stellt ihn auf den Boden. Ansehen mit
+`viewer.html?run=lhm-<name>`.
+
+Fotos aus einer Drehaufnahme: etwa jedes 15. Bild aus `data/runs/<lauf>/frames/` nehmen, 8 Stück reichen.
 
 **Das Einrichten** (LHM++ installieren, CUDA-Erweiterungen bauen, 13 GB Modelle laden, Probelauf) dauert
 etwa 25 Minuten und läuft nur einmal, oder wenn sich `setup-lhm.sh` oder `image` ändert. Danach liegt die
