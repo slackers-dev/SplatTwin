@@ -2,6 +2,22 @@
 
 Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 
+## 27.11.2026: Rektifizierung und Genauigkeit des Zwei-Kamera-Trackings
+
+Erkenntnisse und Messungen zusammengefasst in [`docs/notizen-stereo-tracking.md`](../docs/notizen-stereo-tracking.md).
+
+- Tracking-Seite: «Rektifizierte Ansicht und Genauigkeit» unter «Zweite Kamera». Zeigt beide Bilder
+  rektifiziert mit Epipolarlinien, den Zeilenversatz gleicher Gelenke und die geschätzte Tiefengenauigkeit
+  an der Hüfte samt nötigem Kameraabstand für ±2 cm. Begründung, warum kein dichtes neuronales Stereo:
+  Entscheidung 0010
+- Stereo-Status nennt jetzt auch den Winkel zwischen den Kameras und warnt, wenn eine fast hinter der
+  anderen steht
+- Ruhigeres Tracking: adaptiver One-Euro-Filter nach Kalman/EKF, Regler «Glättung» auf der Tracking-Seite
+- Handy (Kamera B) mit dem genaueren Modell «heavy» und eigener Fingererkennung; sieht die Webcam eine
+  Hand nicht, kommen die Finger vom Handy
+- Erkennung von Kamera B in einem Hintergrund-Strang. Gemessen mit Testvideo (30 Bilder/s, Chrome ohne
+  Fenster): Webcam 30 und Handy 27 bis 30 Bilder/s. Beide im Hintergrund nur 16 bis 20, weil sich zwei
+  Stränge um die GPU streiten
 ## 27.11.2026: Eigenes Video, LHM-Avatar daraus, ExAvatar eingerichtet
 
 - Neues Video (60 s, iPhone, feste Kamera, Drehung, Hände, Bewegung). Für ExAvatar nach SDR umgewandelt.

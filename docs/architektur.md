@@ -82,7 +82,7 @@ OpenCV-Arbeit (Kalibrierung) und ffmpeg laufen in einem Thread-Pool, damit der L
 
 | Ordner | Aufgabe | Darf benutzen |
 |---|---|---|
-| `core/` | reine Mathematik: Kalman, EKF, Stereo, Messung, Hände, Drehwinkel, Überblendung von Live-Bildern | nur `contracts` |
+| `core/` | reine Mathematik: Kalman, EKF, Stereo, Rektifizierung und Genauigkeit, Messung, Hände, Drehwinkel, Überblendung von Live-Bildern | nur `contracts` |
 | `contracts/` | aus `contracts/*.schema.json` erzeugte Typen | – |
 | `tracking/` | Kameras, MediaPipe, Tracker, Kalibrierung, Brücke zur App | `core`, `contracts`, `ui` |
 | `avatar/` | three.js: Szene, Roboter, Retargeting, Splat-Skinning (Roboter-Skelett mit `skin.bin`, oder SMPL-X bei Avataren von LHM++), Raum der Bühne, Presenter | `core`, `contracts`, `live` (Typen) |
@@ -108,6 +108,14 @@ auf die Glieder des Roboters legen und dessen Gewichte übernehmen.
 Animationsbild `stepB()` und `stepA()` mit den aktuellen Einstellungen auf und bekommt Messung, gefilterte
 Gelenke, Position und Kennzahlen zurück. Was damit geschieht (Avatar, Vorschau, Live senden, Status),
 entscheidet die Seite.
+
+**Erkennung.** `tracking/detection.ts` (`CameraDetector`) rechnet MediaPipe je Kamera: Kamera A im
+Hauptstrang (liest das Videobild ohne Kopie), Kamera B in einem Hintergrund-Strang
+(`tracking/detect-worker.ts`, klassischer Worker, weil MediaPipe `importScripts` braucht). So rechnen
+beide gleichzeitig. Beide im Hintergrund war langsamer, weil sie sich um die GPU streiten. Startet der
+Worker nicht, rechnet die Kamera im Hauptstrang. Umstellen zum Vergleichen: `?detA=` / `?detB=`
+`inline | worker | cpu`, Modell je Kamera mit `?poseA=` / `?poseB=` `lite | full | heavy` (B: heavy).
+Nach Kalman bzw. EKF glättet ein One-Euro-Filter (`core/one-euro.ts`) adaptiv.
 
 ## Python (`python/src/splattwin`)
 
