@@ -21,11 +21,13 @@ sys.path.insert(0, os.getcwd())  # config.py und base.py liegen in avatar/main
 
 import numpy as np
 import torch
-from base import Tester
-from config import cfg
 from plyfile import PlyData, PlyElement
 from pytorch3d.ops import knn_points
-from utils.smpl_x import smpl_x
+
+# config zuerst: legt avatar/common in den Pfad, dort liegen base und utils
+from config import cfg  # isort: skip
+from base import Tester  # isort: skip
+from utils.smpl_x import smpl_x  # isort: skip
 
 SH_C0 = 0.28209479177387814
 

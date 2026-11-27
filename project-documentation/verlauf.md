@@ -25,8 +25,12 @@ Erkenntnisse und Messungen zusammengefasst in [`docs/notizen-stereo-tracking.md`
   (`tracking.html?run=lhm-beni&src=/runs/_video/beni.mp4`).
 - ExAvatar als pod-do-Umgebung und -Aufgabe (`setup-exavatar.sh`, `exavatar_modelle.sh`,
   `exavatar_export.py`). Umgebung eingerichtet und mit einem Probelauf geprüft. Ein eigener Export bringt
-  den Avatar in dasselbe Format wie LHM++. Der erste echte Lauf wartet auf die Körpermodelle (SMPL-X,
-  FLAME, SMPL), die eigene Konten brauchen.
+  den Avatar in dasselbe Format wie LHM++.
+- Erster ExAvatar-Lauf auf einer L4: rund 9 h (Fitting 1.5 h, Training 6 h für 5 Epochen), etwa $7.
+  Ergebnis 167 000 Gaussians, Gesicht und Kleidung deutlich schärfer als LHM++
+  (`tracking.html?run=exavatar-beni&src=/runs/_video/beni.mp4`). Unterwegs behoben: libGLU für pyrender,
+  Höchstdauer des Pods (jetzt 10 h), Importreihenfolge im Export. `snapshot_4.pth` liegt unter
+  `data/exavatar/beni/avatar/`, ein neuer Export braucht kein neues Training.
 
 ## 26.11.2026: LHM++ auf RunPod, Werkzeug pod-do
 
