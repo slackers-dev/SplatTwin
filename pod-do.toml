@@ -45,7 +45,8 @@ gpus = ["NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA GeForce RTX 4090", "NVIDIA RTX 
         "NVIDIA L40S", "NVIDIA GeForce RTX 3090"]
 cuda = "12.1"
 disk = 100
-boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git unzip libgl1 libegl1 libgles2 libglib2.0-0 ffmpeg >/dev/null"
+max_hours = 10  # Training allein rund 6.5 h auf einer L4
+boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git unzip libgl1 libglu1-mesa libegl1 libgles2 libglib2.0-0 ffmpeg >/dev/null"
 setup_file = "scripts/pod-do/setup-exavatar.sh"
 vars = { PYTHONUNBUFFERED = "1", PYOPENGL_PLATFORM = "egl", CUDA_VISIBLE_DEVICES = "0" }
 
