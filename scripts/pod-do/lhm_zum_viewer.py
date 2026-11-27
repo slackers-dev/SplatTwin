@@ -9,7 +9,10 @@ LHM++ liefert die T-Pose auf SMPL-X: Meter, y oben, Blick nach +z. Dazu kommen:
 
 Laeuft lokal als `after` von pod-do (siehe pod-do.toml).
 
-    uv run python scripts/pod-do/lhm_zum_viewer.py <name>
+    uv run python scripts/pod-do/lhm_zum_viewer.py <name>             # data/lhm/<name>
+    uv run python scripts/pod-do/lhm_zum_viewer.py <name> exavatar    # data/exavatar/<name>/avatar
+
+ExAvatar (exavatar_export.py) liefert dasselbe Format, nur in seiner eigenen kanonischen Haltung.
 """
 
 import json
@@ -95,8 +98,15 @@ def write_smplx(skin: Path, out: Path, feet: float, count: int) -> None:
 
 def main() -> None:
     name = sys.argv[1]
-    src = ROOT / "data" / "lhm" / name / "avatar.ply"
-    out = ROOT / "data" / "runs" / f"lhm-{name}"
+    kind = sys.argv[2] if len(sys.argv) > 2 else "lhm"
+    folder = (
+        ROOT / "data" / "lhm" / name
+        if kind == "lhm"
+        else ROOT / "data" / kind / name / "avatar"
+    )
+    src = folder / "avatar.ply"
+    run = f"{kind}-{name}"
+    out = ROOT / "data" / "runs" / run
     out.mkdir(parents=True, exist_ok=True)
     shutil.copy(src, out / "splat.ply")
     # skin.bin (alter Weg, von der Tracking-Seite vorgerechnet) passt nicht mehr zum neuen PLY
@@ -115,7 +125,7 @@ def main() -> None:
         json.dumps({"matrix": matrix, "height": round(top - feet, 3)}, indent=2)
     )
 
-    skin = ROOT / "data" / "lhm" / name / "skin.npz"
+    skin = folder / "skin.npz"
     if skin.exists():
         write_smplx(skin, out, feet, len(xyz))
     else:
@@ -134,7 +144,7 @@ def main() -> None:
     cv2.imwrite(str(out / "rig_render.jpg"), img)
 
     print(
-        f"Viewer: viewer.html?run=lhm-{name}, Avatar: tracking.html?run=lhm-{name} (Groesse {top - feet:.2f} m)"
+        f"Viewer: viewer.html?run={run}, Avatar: tracking.html?run={run} (Groesse {top - feet:.2f} m)"
     )
 
 

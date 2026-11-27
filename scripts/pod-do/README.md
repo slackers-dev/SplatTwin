@@ -37,6 +37,9 @@ vorne mit MediaPipe, Kontrolle in `rig_render.jpg`).
 **SMPL-X-Lizenz:** Gewichte und Gelenke stammen aus dem SMPL-X-Modell (nur Forschung und Studium). Sie
 liegen nur unter `data/`, nie im Repo.
 
+Fotos aus einem Video: Standbilder einer langsamen Drehung in A-Haltung, z. B. 13 Stück für
+`data/beispiel-fotos/beni-video` (`ffmpeg -ss <sekunde> -i video.mp4 -frames:v 1 -q:v 2 bild.jpg`).
+
 Fotos aus einer Drehaufnahme: etwa jedes 15. Bild aus `data/runs/<lauf>/frames/` nehmen, 8 Stück reichen.
 
 **Das Einrichten** (LHM++ installieren, CUDA-Erweiterungen bauen, 13 GB Modelle laden, Probelauf) dauert
@@ -48,6 +51,38 @@ Umgebung als Archiv (14 GB) auf dem Volume, und ein neuer Pod holt sie in etwa 2
 **Gute Fotos** (laut LHM++): 4 bis 8 Stück rundherum (vorne, Seiten, hinten, schräg), hoch aufgelöst,
 gleiches Licht, ganze Person im Bild, Hände gut sichtbar, mindestens eines mit ausgebreiteten Armen
 (A-Pose wie in [`docs/drehbuch-brush.md`](../../docs/drehbuch-brush.md)).
+
+## Avatar aus einem Video (ExAvatar)
+
+ExAvatar trainiert aus einem Video einen Avatar mit Körper, Händen und Mimik auf SMPL-X. Aufnahme nach
+[`docs/drehbuch-exavatar.md`](../../docs/drehbuch-exavatar.md), Kamera fest.
+
+```sh
+pod-do run exavatar beni     # Daten aus data/exavatar/beni/, Ergebnis in data/exavatar/beni/avatar/
+```
+
+Vorbereiten (einmal pro Video):
+
+1. Video als SDR-MP4 nach `data/exavatar/<name>/video.mp4`. iPhone-Videos sind HDR (Dolby Vision) und
+   liegen gedreht im Container: `avconvert --source IMG.MOV --preset Preset1920x1080 --output v.mov`,
+   dann `ffmpeg -i v.mov -c copy -an video.mp4`.
+2. `frame_list_all.txt`, `frame_list_train.txt`, `frame_list_test.txt` daneben, eine Bildnummer pro
+   Zeile (ab 0). Nur Bilder, auf denen die ganze Person zu sehen ist. Bewährt: alle mit 10 Bildern pro
+   Sekunde (`seq 120 3 1680`), Training mit 5 (`seq 120 6 1680`), Test eine Auswahl daraus.
+   **Achtung:** Das Fitting löscht alle Bilder, die nicht in `frame_list_all.txt` stehen.
+3. Die Körpermodelle (SMPL-X, FLAME, SMPL) brauchen eigene Konten bei den MPI-Seiten. Die ZIPs
+   unverändert nach `data/models/mpi/` (Liste in `data/models/mpi/LIESMICH.md`). Sie gehen bei jedem Lauf
+   mit hoch und kommen nie in die Umgebung oder ins Repo; `exavatar_modelle.sh` legt sie auf dem Pod ab.
+
+Ablauf auf dem Pod: Bilder aus dem Video, SMPL-X anpassen (DECA, Hand4Whole, DWPose, Fit), Masken (SAM),
+Hintergrund (Depth-Anything), Training (5 Epochen), Ansichten in Ruhehaltung. `exavatar_export.py` wertet
+die Netze von ExAvatar einmal in der Ruhehaltung aus und schreibt `avatar.ply` und `skin.npz` im selben
+Format wie LHM++. `lhm_zum_viewer.py <name> exavatar` legt daraus `data/runs/exavatar-<name>/` an.
+
+Laut den Issues von ExAvatar dauert das 2 bis 3 Stunden auf einer 24-GB-Karte und braucht 17 bis 20 GB
+Speicher (nicht selbst gemessen). Die Umgebung (torch 2.1.2, mmcv 2.1, pytorch3d 0.7.5, 7.6 GB Archiv)
+ist eingerichtet und mit einem Probelauf geprüft. Das Fitting, das Training und der Export sind noch
+nicht getestet, weil die Körpermodelle fehlen.
 
 ## Als Docker-Image (optional)
 

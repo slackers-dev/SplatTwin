@@ -2,6 +2,16 @@
 
 Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 
+## 27.11.2026: Eigenes Video, LHM-Avatar daraus, ExAvatar eingerichtet
+
+- Neues Video (60 s, iPhone, feste Kamera, Drehung, Hände, Bewegung). Für ExAvatar nach SDR umgewandelt.
+- LHM++ aus 13 Standbildern der Drehung: deutlich besser als die alte Aufnahme
+  (`tracking.html?run=lhm-beni&src=/runs/_video/beni.mp4`).
+- ExAvatar als pod-do-Umgebung und -Aufgabe (`setup-exavatar.sh`, `exavatar_modelle.sh`,
+  `exavatar_export.py`). Umgebung eingerichtet und mit einem Probelauf geprüft. Ein eigener Export bringt
+  den Avatar in dasselbe Format wie LHM++. Der erste echte Lauf wartet auf die Körpermodelle (SMPL-X,
+  FLAME, SMPL), die eigene Konten brauchen.
+
 ## 26.11.2026: LHM++ auf RunPod, Werkzeug pod-do
 
 - LHM++ als erster Test für den Avatar-Weg auf SMPL-X (Entscheidung 0007), gerechnet auf RunPod
