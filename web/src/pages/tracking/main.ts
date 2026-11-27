@@ -5,7 +5,8 @@
 //
 // Adresse: ?run=<lauf> Splat aus data/runs, ?src=<video> und ?srcB=<video> statt Kameras,
 // ?upper nur Oberkoerper, ?ghost=<0..100> Roboter unter dem Splat, ?parts Koerperteile einfaerben,
-// ?model=<glb> anderes Modell.
+// ?model=<glb> anderes Modell, ?poseA= / ?poseB=lite|full|heavy Modell je Kamera,
+// ?detA= / ?detB=inline|worker|cpu wo die Erkennung je Kamera rechnet (zum Vergleichen).
 import './style.css';
 import { toVectors } from '../../avatar/points';
 import { loadRobot, ROBOT_URL } from '../../avatar/robot';
@@ -14,14 +15,17 @@ import { DebugSkeleton } from '../../avatar/skeleton';
 import { loadSplatAvatar } from '../../avatar/splat-avatar';
 import { createStage } from '../../avatar/stage';
 import type { Intrinsics } from '../../contracts';
+import { rectify } from '../../core/rectify';
 import type { Slot } from '../../live/protocol';
 import { fetchLiveInfo, LiveSender } from '../../live/sender';
 import { appStream, bridgeBaseline, installAppBridge } from '../../tracking/app-bridge';
 import { type CamId, CAMS, CameraSetup } from '../../tracking/cameras';
-import { createHandLandmarker, createPoseLandmarker } from '../../tracking/detectors';
+import { CameraDetector } from '../../tracking/detection';
+import type { PoseVariant } from '../../tracking/detectors';
 import { Overlay } from '../../tracking/overlay';
+import { RectifiedView, type RectifiedStats } from '../../tracking/rectified-view';
 import { clearStereo, loadStereo, type SavedStereo, saveStereo } from '../../tracking/stereo-store';
-import { type TrackFrame, Tracker, type TrackSettings } from '../../tracking/tracker';
+import { type Detectors, type TrackFrame, type TrackFrameB, Tracker, type TrackSettings } from '../../tracking/tracker';
 import { deviceIdOf, listVideoInputs, openCamera, openFile } from '../../tracking/video';
 import { byId, params } from '../../ui/dom';
 import { loadJson, saveJson } from '../../ui/storage';
@@ -42,6 +46,7 @@ const ui = {
   kalman: input('kalman'),
   sigmaA: input('sigmaA'),
   sigmaZ: input('sigmaZ'),
+  smooth: input('smooth'),
   debug: input('debug'),
   move: input('move'),
   upper: input('upper'),
@@ -61,6 +66,9 @@ const ui = {
   fov: { A: input('fovA'), B: input('fovB') } as Record<CamId, HTMLInputElement>,
   stereoStatus: byId('stereoStatus'),
   intrStatus: byId('intrStatus'),
+  rectify: input('rectify'),
+  rectInfo: byId('rectInfo'),
+  rectBox: byId('rectBox'),
 };
 const status = (text: string) => (ui.status.textContent = text);
 
@@ -79,6 +87,7 @@ readFov();
 
 let stereo: SavedStereo | null = null; // gespeicherte Stereo-Kalibrierung mit Kennzahlen
 let tracker: Tracker | null = null;
+let detectors: Detectors | null = null;
 
 function showStereo(extra = ''): void {
   if (!stereo) {
@@ -86,12 +95,54 @@ function showStereo(extra = ''): void {
     return;
   }
   const px = stereo.rms * cameras.focal('A') * (ui.video.videoHeight || 720);
-  ui.stereoStatus.textContent = `Kalibriert · Kameraabstand ${stereo.baseline.toFixed(2)} m · Fehler ${px.toFixed(1)} px` + extra;
+  const r = rectify(stereo);
+  const warn = r.conditioning < 25 ? ' · Achtung: eine Kamera steht fast hinter der anderen, Tiefe ungenau' : '';
+  ui.stereoStatus.textContent =
+    `Kalibriert · Kameraabstand ${stereo.baseline.toFixed(2)} m · Kameras ${r.vergence.toFixed(0)}° zueinander gedreht · ` +
+    `Fehler ${px.toFixed(1)} px` + extra + warn;
 }
 
 function setStereo(s: SavedStereo | null): void {
   stereo = s;
   if (tracker) tracker.stereo = s ? { R: s.R, T: s.T } : null;
+  updateRectView();
+}
+
+// ---------------------------------------------------------------- Rektifizierte Ansicht
+// Beide Bilder so gedreht, als stuenden die Kameras parallel: gleiche Gelenke liegen auf einer Zeile.
+// Der Zeilenversatz zeigt, wie genau Kalibrierung und Erkennung zusammenpassen.
+let rectView: RectifiedView | null = null;
+let lastImgB: TrackFrameB['img'] = null;
+
+function updateRectView(): void {
+  const on = ui.rectify.checked && !!stereo && !ui.camBBox.hidden;
+  ui.rectBox.hidden = !on;
+  if (!on) {
+    rectView?.set(null, null);
+    ui.rectInfo.textContent = ui.rectify.checked ? 'Zuerst die zweite Kamera starten und kalibrieren.' : '';
+    return;
+  }
+  try {
+    rectView ??= new RectifiedView(byId<HTMLCanvasElement>('rectGl'), byId<HTMLCanvasElement>('rectOverlay'), videos, cameras);
+    rectView.set(rectify(stereo!), { R: stereo!.R, T: stereo!.T });
+    ui.rectInfo.textContent = 'Sammle Gelenke … für eine faire Messung kurz ruhig stehen (die Kameras nehmen nicht gleichzeitig auf).';
+  } catch (err) {
+    ui.rectInfo.textContent = 'Rektifizierung nicht möglich: ' + (err as Error).message;
+    ui.rectBox.hidden = true;
+  }
+}
+
+function showRectStats(s: RectifiedStats | null): void {
+  if (!s || s.samples < 30) return;
+  const cm = (m: number) => (m * 100).toFixed(1);
+  let text = `Zeilenversatz gleicher Gelenke: ${s.rowOffsetPx.toFixed(1)} px (Median)`;
+  if (s.hip) {
+    text +=
+      `\nHüfte in ${s.hip.distance.toFixed(2)} m: Tiefe ±${cm(s.hip.depth)} cm, seitlich ±${cm(s.hip.lateral)} cm, ` +
+      `Winkel der Sehstrahlen ${s.hip.rayAngle.toFixed(0)}°` +
+      `\nFür ±2 cm Tiefe bräuchte es etwa ${s.hip.baselineFor2cm.toFixed(2)} m Kameraabstand`;
+  }
+  ui.rectInfo.textContent = text;
 }
 
 /** Neue Kameradaten machen die Stereo-Kalibrierung ungueltig. */
@@ -194,6 +245,7 @@ async function startVideo(url: string): Promise<void> {
 function showCamB(): void {
   ui.camBBox.hidden = false;
   tracker?.resetB();
+  updateRectView();
 }
 
 async function startCameraB(deviceId: string): Promise<void> {
@@ -281,18 +333,30 @@ const setUpper = () => {
 ui.upper.addEventListener('change', setUpper);
 byId('btnCenter').addEventListener('click', () => tracker?.recenter());
 ui.mirror.addEventListener('change', () => document.body.classList.toggle('mirror', ui.mirror.checked));
+ui.rectify.addEventListener('change', updateRectView);
 ui.debug.addEventListener('change', () => {
   skelRaw.visible = skelFiltered.visible = ui.debug.checked;
 });
 const showSliders = () => {
   byId('sigmaAVal').textContent = (+ui.sigmaA.value).toFixed(1);
   byId('sigmaZVal').textContent = (+ui.sigmaZ.value).toFixed(1);
+  byId('smoothVal').textContent = ui.smooth.value;
+  saveJson(SMOOTH_KEY, +ui.smooth.value);
 };
+const SMOOTH_KEY = 'splattwin.smoothing';
+const savedSmooth = loadJson<number>(SMOOTH_KEY);
+if (typeof savedSmooth === 'number') ui.smooth.value = String(savedSmooth);
+ui.smooth.addEventListener('input', showSliders);
 ui.sigmaA.addEventListener('input', showSliders);
 ui.sigmaZ.addEventListener('input', showSliders);
 showSliders();
 
-const settings = (): TrackSettings => ({ sigmaA: +ui.sigmaA.value, sigmaZ: +ui.sigmaZ.value / 100, fingers: ui.fingers.checked });
+const settings = (): TrackSettings => ({
+  sigmaA: +ui.sigmaA.value,
+  sigmaZ: +ui.sigmaZ.value / 100,
+  fingers: ui.fingers.checked,
+  smoothing: ui.kalman.checked ? +ui.smooth.value / 100 : 0,
+});
 
 // ---------------------------------------------------------------- Live senden
 // Auf die Buehne (live.html): Platz A oder B, Name und Sparmodus werden gemerkt. Wer ueber
@@ -383,9 +447,14 @@ function apply(f: TrackFrame): void {
   skelRaw.update(toVectors(f.raw) ?? []);
   skelFiltered.update(toVectors(f.filtered) ?? []);
   const distance = f.rawRoot ? ` · Distanz ${(-f.rawRoot[2]).toFixed(2)} m` : '';
+  const where = (d: CameraDetector) => (d.mode === 'worker' ? 'Hintergrund' : 'Hauptstrang');
+  const det = detectors
+    ? ` · Erkennung A ${detectors.A.ms.toFixed(0)} ms (${where(detectors.A)})` +
+      (ui.camBBox.hidden ? '' : `, B ${detectors.B.fps.toFixed(0)} B/s, ${detectors.B.ms.toFixed(0)} ms (${where(detectors.B)})`)
+    : '';
   status(
     f.personSeen
-      ? `Person erkannt · ${f.fps.toFixed(0)} fps${distance}` +
+      ? `Person erkannt · ${f.fps.toFixed(0)} fps${distance}${det}` +
           (f.mode === 'stereo'
             ? ` · Stereo: ${f.nTri} Gelenke trianguliert · EKF: ${f.fused} Gelenke, ${f.rejected} Messungen verworfen`
             : ' · eine Kamera')
@@ -402,10 +471,14 @@ renderer.setAnimationLoop((now: number) => {
     if (tracker) {
       const s = settings();
       const b = tracker.stepB(now, s);
-      if (b) overlayB.draw(b.img);
+      if (b) {
+        overlayB.draw(b.img, b.handsImg);
+        lastImgB = b.img;
+      }
       const f = tracker.stepA(now, s);
       if (f) {
         overlayA.draw(f.img, f.handsImg);
+        if (!ui.rectBox.hidden) showRectStats(rectView?.draw(f.img, lastImgB) ?? null);
         showCalibration(f);
         apply(f);
       }
@@ -458,15 +531,23 @@ async function loadSplat(): Promise<void> {
 
 try {
   status('Lade Modelle …');
-  const [robot, pose, poseB, hands] = await Promise.all([
+  // Kamera B (Handy): genaueres Modell; mit ?poseB=full zurueck auf das schnellere.
+  const variantB = (query.get('poseB') as PoseVariant | null) ?? 'heavy';
+  // Erkennung: Kamera A im Hauptstrang (liest das Videobild direkt, ohne Kopie), Kamera B in einem
+  // Hintergrund-Strang, damit beide gleichzeitig rechnen. Gemessen war das schneller als beide im
+  // Hintergrund (die streiten sich um die GPU) oder beide nacheinander. Mit ?detA= / ?detB=
+  // inline | worker | cpu laesst sich das umstellen.
+  const detMode = (key: string, fallback: string) => query.get(key) ?? fallback;
+  const delegateOf = (key: string): 'GPU' | 'CPU' => (query.get(key) === 'cpu' ? 'CPU' : 'GPU');
+  const [robot, detA, detB] = await Promise.all([
     loadRobot(scene, MODEL_URL),
-    createPoseLandmarker(),
-    createPoseLandmarker(),
-    createHandLandmarker(),
+    CameraDetector.create((query.get('poseA') as PoseVariant | null) ?? 'full', detMode('detA', 'inline') === 'inline', delegateOf('detA')),
+    CameraDetector.create(variantB, detMode('detB', 'worker') === 'inline', delegateOf('detB')),
   ]);
+  detectors = { A: detA, B: detB };
   retargeter = robot;
   setUpper();
-  tracker = new Tracker({ pose, poseB, hands }, ui.video, ui.videoB, cameras, bridgeBaseline);
+  tracker = new Tracker(detectors, ui.video, ui.videoB, cameras, bridgeBaseline);
   status('Bereit. Webcam starten oder Video laden.');
   const saved = loadStereo();
   if (saved) {

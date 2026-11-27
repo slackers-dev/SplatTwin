@@ -44,6 +44,12 @@ button:hover, .filebtn:hover { border-color: var(--accent); }
 #chessSide { position: absolute; left: 16px; bottom: 14px; display: flex; gap: 12px; align-items: flex-end; }
 #coverage { width: 176px; height: 99px; border: 1px solid #ccc; background: #fafafa; }
 #chess button { flex: none; background: #f2f2f2; color: #222; border-color: #ccc; }
+#rectBox { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(720px, 46vw); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; }
+#rectBox[hidden] { display: none; }
+#rectBox canvas { display: block; width: 100%; height: auto; }
+#rectBox #rectOverlay { position: absolute; inset: 0; height: 100%; }
+#rectBox .tag { position: absolute; top: 6px; left: 8px; font-size: 11px; color: #fff; background: #0008; padding: 1px 6px; border-radius: 4px; }
+#rectBox .tag.right { left: calc(50% + 8px); }
 .mirror #preview, .mirror #scene { transform: scaleX(-1); }
 .legend { margin-top: 8px; color: var(--dim); font-size: 12px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
