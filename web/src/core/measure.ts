@@ -27,7 +27,7 @@ export interface Measurement {
   pts: (Vec3 | null)[];
   /** Sichtbarkeit je Gelenk */
   vis: number[];
-  /** Position der Huefte im Raum (x, 0, z), null wenn unbekannt */
+  /** Position der Huefte im Raum (x, y, z), Achsen des Avatars, null wenn unbekannt */
   root: Vec3 | null;
   /** Anzahl triangulierter Gelenke (nur Stereo) */
   nTri: number;
@@ -43,15 +43,26 @@ export const okJoint = (world: Landmark[] | null, img: Landmark2D[] | null, i: n
 
 const asVec = (l: Landmark): Vec3 => [l.x, l.y, l.z];
 
+// Strecken mit bekannter realer Laenge fuer den Massstab: Rumpf, sonst Schultern und Kopf.
+const TORSO_PAIRS = [[LM.lSh, LM.rSh], [LM.lHip, LM.rHip], [LM.lSh, LM.lHip], [LM.rSh, LM.rHip], [LM.lSh, LM.rHip], [LM.rSh, LM.lHip]];
+const HEAD_PAIRS = [[LM.lSh, LM.rSh], [LM.lEar, LM.rEar], [LM.lSh, LM.lEar], [LM.rSh, LM.rEar]];
+
 /**
- * Position der Person vor der Kamera aus dem Lochkamera-Modell:
- * Tiefe Z = f * (reale Laenge) / (Laenge im Bild). Als Massstab dienen Rumpfstrecken,
- * deren reale Laenge parallel zur Bildebene aus den 3D-Landmarks bekannt ist.
+ * Position der Huefte vor der Kamera aus dem Lochkamera-Modell, in den Achsen des Avatars (x, y oben, -Tiefe).
+ *
+ * Tiefe Z = f * (reale Laenge) / (Laenge im Bild). Als Massstab dienen Rumpfstrecken, deren reale Laenge
+ * parallel zur Bildebene aus den 3D-Landmarks bekannt ist. Sieht die Kamera die Huefte nicht (Laptop,
+ * nur Oberkoerper im Bild), reichen Schultern und Ohren.
+ * Die Huefte selbst: Jeder sichere Ankerpunkt (Schultern, Huefte) liegt im Bild auf einem Sehstrahl;
+ * in Tiefe Z ergibt das seinen Ort im Raum, minus seine Lage relativ zur Huefte (Weltpunkte von MediaPipe,
+ * Achsen wie die Kamera). So bleibt die Hoehe beim Vorbeugen gleich und sinkt nur, wenn die Person
+ * wirklich tiefer geht (in die Knie). Die Hoehe ist relativ zur Bildmitte: nur Aenderungen zaehlen.
  */
 export function estimateRoot(img: Landmark[], world: Landmark[], cam: Pick<CameraModel, 'aspect' | 'focal'>): Vec3 | null {
-  const idx = [LM.lSh, LM.rSh, LM.lHip, LM.rHip];
-  if (idx.some((i) => !inFrame(img[i]) || (img[i].visibility ?? 1) < MIN_VISIBILITY)) return null;
-  const pairs = [[LM.lSh, LM.rSh], [LM.lHip, LM.rHip], [LM.lSh, LM.lHip], [LM.rSh, LM.rHip], [LM.lSh, LM.rHip], [LM.rSh, LM.lHip]];
+  const sure = (i: number) => inFrame(img[i]) && (img[i].visibility ?? 1) >= MIN_VISIBILITY;
+  if (!sure(LM.lSh) || !sure(LM.rSh)) return null;
+  const hips = sure(LM.lHip) && sure(LM.rHip);
+  const pairs = (hips ? TORSO_PAIRS : HEAD_PAIRS).filter(([i, j]) => sure(i) && sure(j));
   let metric = 0,
     pixels = 0;
   for (const [i, j] of pairs) {
@@ -60,8 +71,17 @@ export function estimateRoot(img: Landmark[], world: Landmark[], cam: Pick<Camer
   }
   if (pixels < 1e-4) return null;
   const Z = (cam.focal * metric) / pixels;
-  const u = (img[LM.lHip].x + img[LM.rHip].x) / 2 - 0.5;
-  return [(u * cam.aspect * Z) / cam.focal, 0, -Z];
+  const anchors = hips ? [LM.lSh, LM.rSh, LM.lHip, LM.rHip] : [LM.lSh, LM.rSh];
+  let x = 0,
+    y = 0,
+    z = 0;
+  for (const i of anchors) {
+    x += ((img[i].x - 0.5) * cam.aspect * Z) / cam.focal - world[i].x;
+    y += ((img[i].y - 0.5) * Z) / cam.focal - world[i].y;
+    z += Z - world[i].z;
+  }
+  const n = anchors.length;
+  return [x / n, -y / n, -z / n];
 }
 
 /** Eine Kamera: 3D-Pose direkt aus MediaPipe (Tiefe ist nur geschaetzt). */
@@ -130,7 +150,7 @@ export function measureStereo(
     pts[i] = camToThree(sub(P, offA));
     vis[i] = Math.max(a ? (worldA[i].visibility ?? 1) : 0, b ? (worldB[i].visibility ?? 1) : 0);
   }
-  return { pts, abs, vis, root: [offA[0], 0, -offA[2]], nTri };
+  return { pts, abs, vis, root: [offA[0], -offA[1], -offA[2]], nTri };
 }
 
 /**

@@ -26,6 +26,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 #big { position: fixed; inset: 64px 16px 72px; display: grid; place-items: center; pointer-events: none; }
 #big[hidden] { display: none; }
 #big canvas { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 10px 40px #000a; pointer-events: auto; }
+/* Als Vorschau in der Tracking-Seite: ohne Titel, die Seite hat ihren eigenen. */
+.embed #brand { display: none; }
 @media (max-width: 560px) {
   #brand h1 { font-size: 13px; }
   #bar button { padding: 7px 9px; }

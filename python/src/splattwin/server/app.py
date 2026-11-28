@@ -42,7 +42,7 @@ MAX_BODY = 20 * 1024 * 1024
 # Was Zuschauer (nicht dieser Rechner, nicht eingeloggt) abrufen duerfen, nur mit GET oder HEAD.
 REMOTE_ALLOWED = re.compile(
     r"/(live\.html|logo\.svg|favicon\.ico|assets/[\w.-]+\.(js|css|wasm|mjs)|models/[\w.-]+\.glb"
-    r"|runs/[\w-]+/(splat\.ply|splat\.json|rig\.json|skin\.bin)|stage/slides\.pdf|ws/stage|api/info)?"
+    r"|runs/[\w-]+/(splat\.ply|splat\.json|rig\.json|skin\.bin|smplx\.json|smplx_skin\.bin)|stage/slides\.pdf|ws/stage|api/info)?"
 )
 # Was eingeloggte Presenter nicht duerfen (Aufnahmen speichern bleibt bei diesem Rechner).
 PRESENTER_BLOCKED = re.compile(r"/api/capture")

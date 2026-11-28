@@ -11,7 +11,10 @@ import { cloneRobot } from './robot';
 import { SEATS, seatPosition } from './room';
 import { loadSplatAvatar, type SplatAvatar } from './splat-avatar';
 
-const STALE_MS = 2000; // so lange ohne Bild gilt ein Presenter als offline
+// So lange ohne Bild gilt ein Presenter als offline. Grosszuegig: Laeuft die Tracking-Seite gedrosselt
+// (verdecktes Fenster), kommen die Bilder in Abstaenden von bis zu 2,5 s, der Presenter soll dann
+// stocken, aber nicht verschwinden.
+const STALE_MS = 5000;
 const ROAM = 1.4; // so weit (m) darf ein Presenter von seinem Platz weglaufen
 
 // Splats nacheinander laden: auf schwachen Geraeten sonst zwei schwere Rechnungen gleichzeitig.
@@ -118,13 +121,17 @@ export class Presenter {
     });
   }
 
+  private lastUpdate = 0;
+
   update(now: number): void {
+    const dt = this.lastUpdate ? (now - this.lastUpdate) / 1000 : undefined;
+    this.lastUpdate = now;
     const f = this.blend.sample(now); // null vor dem ersten Bild
     const online = !!f && now - this.blend.lastTime < STALE_MS;
     if (f && online) {
       const r = this.retargeter;
       r.upperBodyOnly = f.upper;
-      r.apply(toVectors(f.pts) ?? [], { Left: toVectors(f.hands.Left), Right: toVectors(f.hands.Right) });
+      r.apply(toVectors(f.pts) ?? [], { Left: toVectors(f.hands.Left), Right: toVectors(f.hands.Right) }, { height: f.height, face: f.face, dt });
       const clamp = (v: number) => Math.max(-ROAM, Math.min(ROAM, v));
       r.model.position.x = clamp(f.pos[0]!);
       r.model.position.z = clamp(f.pos[1]!);

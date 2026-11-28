@@ -104,6 +104,13 @@ Skelett hängt als Mitläufer am Retargeter des Roboters (`Retargeter.followers`
 Punkte; Seiten und Bühne rufen weiter nur den Roboter auf. Ohne `smplx.json` gilt der alte Weg: Kleckse
 auf die Glieder des Roboters legen und dessen Gewichte übernehmen.
 
+**Höhe.** `core/measure.ts` misst die Höhe der Hüfte aus dem Kamerabild (auch ohne Hüfte im Bild),
+`core/height.ts` macht daraus die Höhe relativ zum Stehen (`TrackFrame.height`, im Live-Bild `height`).
+`Retargeter.apply(P, hands, { height })` stellt die Figur auf diese Höhe und knickt die Beine mit
+Zwei-Knochen-IK, damit die Füsse auf dem Boden bleiben. Ohne Höhe gilt: tiefster Fuss auf dem Boden.
+Nullpunkt im Raum und Höhenbezug entstehen erst, wenn die Messung ruhig ist (`core/settle.ts`).
+Entscheidung 0011.
+
 **Tracker.** `tracking/tracker.ts` enthält den Ablauf pro Bild ohne Bedienelemente: Die Seite ruft pro
 Animationsbild `stepB()` und `stepA()` mit den aktuellen Einstellungen auf und bekommt Messung, gefilterte
 Gelenke, Position und Kennzahlen zurück. Was damit geschieht (Avatar, Vorschau, Live senden, Status),

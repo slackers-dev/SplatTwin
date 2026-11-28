@@ -2,10 +2,11 @@
 // im Hauptstrang. Die Kamera liefert ein Bild ab, sobald der Strang frei ist; das Ergebnis holt
 // der Tracker beim naechsten Animationsbild ab. Damit laufen Kamera A, Kamera B und das Zeichnen
 // gleichzeitig statt nacheinander.
-import type { HandLandmarker, NormalizedLandmark, PoseLandmarker } from '@mediapipe/tasks-vision';
+import type { FaceLandmarker, HandLandmarker, NormalizedLandmark, PoseLandmarker } from '@mediapipe/tasks-vision';
+import { type FacePose, headCrop, quatFromMatrix } from '../core/face';
 import type { HandDetection } from '../core/hands';
 import type { Landmark } from '../core/landmarks';
-import { createHandLandmarker, createPoseLandmarker, type PoseVariant } from './detectors';
+import { createFaceLandmarker, createHandLandmarker, createPoseLandmarker, type PoseVariant } from './detectors';
 
 /** Ergebnis fuer ein Bild einer Kamera. */
 export interface Detection {
@@ -16,6 +17,8 @@ export interface Detection {
   img: NormalizedLandmark[] | null;
   world: Landmark[] | null;
   hands: HandDetection | null;
+  /** Kopf und Mund aus dem Gesichtsmodell (nur im Hauptstrang, sonst null) */
+  face?: FacePose | null;
   /** Rechenzeit der Erkennung in ms */
   ms: number;
 }
@@ -35,6 +38,9 @@ export class CameraDetector {
   private worker: Worker | null = null;
   private pose: PoseLandmarker | null = null;
   private hands: HandLandmarker | null = null;
+  private face: FaceLandmarker | null = null;
+  private faceLoading = false;
+  private crop: HTMLCanvasElement | null = null;
   private busy = false;
   private latest: Detection | null = null;
   private pending: { t: number; stamp: number } | null = null;
@@ -112,22 +118,24 @@ export class CameraDetector {
    * Neues Bild abgeben, wenn die Erkennung frei ist. stamp = Aufnahmezeit des Bildes.
    * Im Hauptstrang wird sofort gerechnet.
    */
-  submit(video: HTMLVideoElement, now: number, stamp: number, fingers: boolean): void {
+  submit(video: HTMLVideoElement, now: number, stamp: number, fingers: boolean, face = false): void {
     if (this.busy || video.readyState < 2 || video.currentTime === this.lastSent) return;
     // Zeitstempel muessen fuer MediaPipe streng steigen.
-    const t = Math.max(now, this.lastT + 0.01);
+    const t = Math.max(now, this.lastT + 1);
     this.lastT = t;
     this.lastSent = video.currentTime;
     if (this.mode === 'inline') {
       const start = performance.now();
       const p = this.pose!.detectForVideo(video, t);
       const h = fingers ? this.hands!.detectForVideo(video, t) : null;
+      const img = p.landmarks?.[0] ?? null;
       this.latest = {
         t,
         stamp,
-        img: p.landmarks?.[0] ?? null,
+        img,
         world: p.worldLandmarks?.[0] ?? null,
         hands: h ? { landmarks: h.landmarks, worldLandmarks: h.worldLandmarks } : null,
+        face: face && img ? this.detectFace(video, img, t) : null,
         ms: performance.now() - start,
       };
       this.ms += (this.latest.ms - this.ms) * 0.1;
@@ -142,6 +150,35 @@ export class CameraDetector {
         this.pending = null;
         this.error = String(err);
       });
+  }
+
+  /**
+   * Kopf und Mund: Kopf aus dem Bild ausschneiden (core/face headCrop), auf 256 px vergroessern und
+   * dem Gesichtsmodell geben. Im ganzen Bild findet es ein Gesicht ab etwa 2 m nicht mehr. Das Modell
+   * laedt beim ersten Gebrauch (3.7 MB), bis dahin null.
+   */
+  private detectFace(video: HTMLVideoElement, img: NormalizedLandmark[], t: number): FacePose | null {
+    if (!this.face) {
+      if (!this.faceLoading) {
+        this.faceLoading = true;
+        createFaceLandmarker(this.delegate)
+          .then((f) => (this.face = f))
+          .catch((err) => console.warn('Gesichtsmodell nicht geladen:', err));
+      }
+      return null;
+    }
+    const box = headCrop(img, video.videoWidth, video.videoHeight);
+    if (!box) return null;
+    const c = (this.crop ??= Object.assign(document.createElement('canvas'), { width: 256, height: 256 }));
+    const g = c.getContext('2d', { willReadFrequently: false })!;
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, 256, 256);
+    g.drawImage(video, box.x, box.y, box.size, box.size, 0, 0, 256, 256);
+    const r = this.face.detectForVideo(c, t);
+    const m = r.facialTransformationMatrixes?.[0]?.data;
+    if (!m) return null;
+    const jaw = r.faceBlendshapes?.[0]?.categories.find((k) => k.categoryName === 'jawOpen')?.score ?? 0;
+    return { q: quatFromMatrix(m), jaw };
   }
 
   /** Neuestes, noch nicht abgeholtes Ergebnis. */

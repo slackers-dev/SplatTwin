@@ -13,6 +13,7 @@ import { loadRobot, ROBOT_URL } from '../../avatar/robot';
 import type { Retargeter } from '../../avatar/retarget';
 import { DebugSkeleton } from '../../avatar/skeleton';
 import { loadSplatAvatar } from '../../avatar/splat-avatar';
+import { startTicker } from '../../tracking/ticker';
 import { createStage } from '../../avatar/stage';
 import type { Intrinsics } from '../../contracts';
 import { rectify } from '../../core/rectify';
@@ -49,9 +50,11 @@ const ui = {
   smooth: input('smooth'),
   debug: input('debug'),
   move: input('move'),
+  height: input('height'),
   upper: input('upper'),
   mirror: input('mirror'),
   fingers: input('fingers'),
+  face: input('face'),
   camera: byId<HTMLSelectElement>('camera'),
   cameraB: byId<HTMLSelectElement>('cameraB'),
   camBBox: byId('camBBox'),
@@ -175,7 +178,7 @@ function setIntrinsics(cam: CamId, k: Intrinsics | null): void {
 
 /**
  * Kameras der Splattwin-App liefern ihre Kameradaten selbst: Brennweite und Bildmittelpunkt vom
- * Geraet, das Bild ist bereits entzerrt. Das ersetzt fuer sie das Schachbrett. Wechselt in der App
+ * Geraet (ohne Verzeichnung). Das ersetzt fuer sie das Schachbrett, solange keines gemacht wurde. Wechselt in der App
  * die Linse oder das Format, meldet sich der Stream und die Daten werden erneuert.
  */
 function adoptAppCamera(cam: CamId, stream: MediaStream): void {
@@ -184,7 +187,13 @@ function adoptAppCamera(cam: CamId, stream: MediaStream): void {
   const use = () => {
     const k = app.intrinsics;
     if (cam === 'B') ui.camBInfo.textContent = `Kamera B: ${app.info.width}×${app.info.height} · Linse und Zoom in der Splattwin-App`;
-    if (!k || JSON.stringify(k) === JSON.stringify(cameras.intrinsics[cam])) return;
+    const have = cameras.intrinsics[cam];
+    if (!k || JSON.stringify(k) === JSON.stringify(have)) return;
+    // Eine Schachbrett-Kalibrierung fuer dasselbe Seitenverhaeltnis nicht ueberschreiben: Sie kennt auch die
+    // Verzeichnung, die das Geraet nicht korrigiert. Sonst ginge bei jedem Start von Kamera B die
+    // Stereo-Kalibrierung verloren.
+    // Die Werte sind auf die Bildgroesse normiert: gilt auch bei kleinerem Livebild mit gleichem Seitenverhaeltnis.
+    if (have && (have.views ?? 0) > 0 && Math.abs(have.width / have.height - k.width / k.height) < 0.01) return;
     setIntrinsics(cam, k);
   };
   app.onchange = use;
@@ -355,6 +364,7 @@ const settings = (): TrackSettings => ({
   sigmaA: +ui.sigmaA.value,
   sigmaZ: +ui.sigmaZ.value / 100,
   fingers: ui.fingers.checked,
+  face: ui.face.checked,
   smoothing: ui.kalman.checked ? +ui.smooth.value / 100 : 0,
 });
 
@@ -422,24 +432,40 @@ function showCalibration(f: TrackFrame): void {
   }
 }
 
+// Figur im Raum: hoechstens so schnell wie ein Mensch rennt. Beim Wechsel zwischen einer und zwei
+// Kameras wird neu eingemittet; die Figur gleitet dann hinueber statt zu springen.
+const MAX_ROAM_SPEED = 3; // m/s
+let lastApply = 0;
+
+function approach(from: number, to: number, maxStep: number): number {
+  return from + Math.max(-maxStep, Math.min(maxStep, to - from));
+}
+
 function apply(f: TrackFrame): void {
+  const now = performance.now();
+  const dt = lastApply ? Math.min((now - lastApply) / 1000, 0.1) : undefined;
+  lastApply = now;
   const useFilter = ui.kalman.checked;
   const pts = useFilter ? f.filtered : f.raw;
   const hands = useFilter ? f.filteredHands : f.rawHands;
   if (retargeter) {
-    retargeter.apply(toVectors(pts) ?? [], { Left: toVectors(hands.Left), Right: toVectors(hands.Right) });
+    // Hoehe der Huefte: in die Knie gehen senkt die Figur, die Beine knicken ein, die Fuesse bleiben am Boden.
+    const height = ui.height.checked ? f.height : null;
+    const face = ui.face.checked ? f.face : null;
+    retargeter.apply(toVectors(pts) ?? [], { Left: toVectors(hands.Left), Right: toVectors(hands.Right) }, { face, height, dt: useFilter ? dt : undefined });
     const r = useFilter ? f.root : f.rawRoot;
     const pos = retargeter.model.position;
     // Nur Oberkoerper: Die Position im Raum haengt an der Huefte, also bleibt die Figur stehen.
     if (ui.upper.checked || !ui.move.checked) {
       pos.x = pos.z = 0;
     } else if (r && f.origin) {
-      pos.x = r[0] - f.origin[0];
-      pos.z = r[2] - f.origin[2];
+      const step = useFilter && dt ? MAX_ROAM_SPEED * dt : Infinity;
+      pos.x = approach(pos.x, r[0] - f.origin[0], step);
+      pos.z = approach(pos.z, r[2] - f.origin[2], step);
     }
     if (ui.live.checked) {
       sender.send(
-        { t: performance.now(), upper: ui.upper.checked, mirror: ui.mirror.checked, pos: [pos.x, pos.z], pts, hands },
+        { t: performance.now(), upper: ui.upper.checked, mirror: ui.mirror.checked, pos: [pos.x, pos.z], height, face, pts, hands },
         { name: ui.liveName.value.trim().slice(0, 24), run: RUN },
       );
     }
@@ -455,18 +481,52 @@ function apply(f: TrackFrame): void {
   status(
     f.personSeen
       ? `Person erkannt · ${f.fps.toFixed(0)} fps${distance}${det}` +
+          (ui.face.checked ? (f.face ? ` · Gesicht, Mund ${(f.face.jaw * 100).toFixed(0)} %` : ' · kein Gesicht') : '') +
           (f.mode === 'stereo'
-            ? ` · Stereo: ${f.nTri} Gelenke trianguliert · EKF: ${f.fused} Gelenke, ${f.rejected} Messungen verworfen`
-            : ' · eine Kamera')
+            ? ` · Stereo: ${f.nTri} Gelenke trianguliert · EKF: ${f.fused} Gelenke, ${f.rejected} Messungen verworfen` +
+              ` · ${f.modeSwitches} Wechsel Stereo/eine Kamera` +
+              (f.lagB === null ? '' : ` · Bild B ${f.lagB.toFixed(0)} ms älter als A`)
+            : ` · eine Kamera${f.modeSwitches ? ` · ${f.modeSwitches} Wechsel Stereo/eine Kamera` : ''}` +
+              (stereo && f.lagB !== null && f.lagB >= 250
+                ? ` · Stereo aus: Bild B kommt ${f.lagB.toFixed(0)} ms zu spät (WLAN?)`
+                : ''))
       : `Keine Person im Bild · ${f.fps.toFixed(0)} fps`,
   );
 }
+
+// ---------------------------------------------------------------- Bühnenansicht
+// Die echte Buehne (live.html) als volle Vorschau im selben Fenster. Ein zweites Fenster mit der Buehne
+// verdeckt sonst die Tracking-Seite, und Chrome drosselt verdeckte Seiten samt MediaPipe stark (gemessen:
+// Erkennung 400 bis 900 ms statt 30 ms, nur 2 Bilder/s auf der Buehne). So bleibt alles sichtbar.
+const stageView = (() => {
+  const frame = byId<HTMLIFrameElement>('stageView');
+  const toggle = input('stageToggle');
+  const state = { on: false };
+  toggle.addEventListener('change', () => {
+    state.on = toggle.checked;
+    frame.hidden = !state.on;
+    document.body.classList.toggle('stage-on', state.on);
+    // Ausgeschaltet die Buehne ganz entladen: sie soll keine Grafikleistung mehr kosten.
+    frame.src = state.on ? '/live.html?embed' : 'about:blank';
+    // Die Vorschau zeigt nur, was ankommt: also auch senden.
+    if (state.on && !ui.live.checked) {
+      ui.live.checked = true;
+      ui.live.dispatchEvent(new Event('change'));
+    }
+  });
+  return state;
+})();
 
 // Erkennung bei jedem Kamerabild, die eigene 3D-Vorschau aber hoechstens 30-mal pro Sekunde (120-Hz-
 // Bildschirme zeichneten sonst viermal so oft) und beim Senden im Sparmodus nur 15-mal: Die
 // Grafikkarte bleibt fuer MediaPipe frei, es kommen mehr Bilder auf der Buehne an.
 let lastRender = 0;
-renderer.setAnimationLoop((now: number) => {
+let lastStep = 0;
+/** Ein Tracking-Schritt: Erkennung, Filter, Avatar, Senden (ohne die 3D-Vorschau zu zeichnen). */
+function trackStep(): void {
+  // Eine Uhr fuer beide Takte (Animationsschleife und Worker), damit die Zeiten fuer MediaPipe steigen.
+  const now = performance.now();
+  lastStep = now;
   try {
     if (tracker) {
       const s = settings();
@@ -487,6 +547,16 @@ renderer.setAnimationLoop((now: number) => {
     console.error(err);
     status('Fehler: ' + (err as Error).message);
   }
+}
+// Verdeckt ein anderes Fenster die Seite, drosselt Chrome die Animationsschleife: dann treibt der
+// Takt aus dem Worker das Tracking weiter (tracking/ticker.ts).
+startTicker(30, () => {
+  if (performance.now() - lastStep > 50) trackStep();
+});
+renderer.setAnimationLoop((now: number) => {
+  if (performance.now() - lastStep > 4) trackStep();
+  // Bühnenansicht: die eigene 3D-Szene nicht zeichnen, die Grafikkarte gehoert der Buehne und MediaPipe.
+  if (stageView.on) return;
   const interval = ui.live.checked && ui.liveLite.checked ? 1000 / 15 : 1000 / 30;
   if (now - lastRender < interval - 2) return;
   lastRender = now;

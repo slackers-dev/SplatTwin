@@ -16,6 +16,8 @@ import { drawPlaceholder, loadSlides, renderSlide } from '../../slides/slides';
 import { byId, params } from '../../ui/dom';
 
 const query = params();
+// ?embed: als Vorschau in der Tracking-Seite, deren Bedienfeld links liegt.
+if (query.has('embed')) document.body.classList.add('embed');
 const weakDevice = matchMedia('(pointer: coarse)').matches || (navigator.hardwareConcurrency || 8) <= 4;
 const quality = query.get('q');
 

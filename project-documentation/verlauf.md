@@ -2,6 +2,36 @@
 
 Neueste Einträge oben. Pro Eintrag: Datum, was passiert ist, Links.
 
+## 28.11.2026: In die Knie gehen, ExAvatar auf der Bühne
+
+- Der Avatar folgt der Höhe der Hüfte: in die Knie gehen senkt ihn, die Beine knicken per IK ein, die
+  Füsse bleiben auf dem Boden, auch wenn die Kamera die Beine nicht sieht (Laptop). Springen hebt ihn.
+  Begründung und Messungen in Entscheidung 0011. Schalter «In die Knie gehen» auf der Tracking-Seite.
+- Live-Format Version 2 mit der Höhe, damit auch die Bühne mitgeht.
+- Behoben: Der Avatar verschwand auf der Tracking-Seite, wenn das Video mit einer hereinlaufenden Person
+  begann. Der Nullpunkt kam vom ersten, halb erkannten Bild (15 m entfernt) und stellte den Avatar hinter
+  die Kamera. Nullpunkt und Höhenbezug gelten jetzt erst, wenn die Messung ruhig ist (`core/settle.ts`).
+- Zuschauer über das Internet dürfen jetzt `smplx.json` und `smplx_skin.bin` laden, sonst sahen sie
+  statt des ExAvatars nichts Brauchbares.
+- Geprüft mit dem eigenen Video (`tracking.html?run=exavatar-beni&src=/runs/_video/beni.mp4`) und auf
+  der Bühne mit Live-Übertragung.
+- Behoben: Auf der Bühne kippte der Avatar beim Wegdrehen um oder lag waagrecht in der Luft. Die Bühne
+  blendet zwischen zwei Live-Bildern über; vertauscht die Erkennung links und rechts, fielen Schultern und
+  Hüften im Zwischenbild auf einen Punkt. Springt der Rumpf, gilt jetzt direkt das neue Bild (`core/blend.ts`).
+- Tracking-Seite: Schalter «Bühnenansicht» zeigt die echte Bühne als Vorschau im selben Fenster. Ein
+  zweites Fenster mit der Bühne verdeckte die Tracking-Seite, Chrome drosselte sie samt MediaPipe
+  (Erkennung 400 bis 900 ms statt 30 ms), auf der Bühne kamen nur 2 Bilder/s an. Mit dem Schalter etwa 25.
+- Ein Takt aus einem Worker treibt das Tracking weiter, wenn Chrome die Animationsschleife drosselt; die
+  Bühne zeigt einen Presenter erst nach 5 s ohne Bild als offline (vorher 2 s).
+- Bühne spielt die Live-Bilder jetzt mit einem kleinen Puffer im Takt des Senders ab (60 bis 250 ms
+  Verzögerung, je nach Schwankung der Laufzeit) statt ab Ankunft überzublenden. Unregelmässig ankommende
+  Bilder liessen den Avatar sonst zucken.
+- Kopf und Mund: MediaPipe Face Landmarker auf einem vergrösserten Kopfausschnitt (im ganzen Bild ist
+  das Gesicht ab etwa 2 m zu klein). Der Kopf folgt der Drehung des Gesichtsmodells statt Nase und Ohren,
+  der Kiefer des SMPL-X-Skeletts öffnet sich mit `jawOpen` (ExAvatar hat dafür rund 38 000 Kleckse am
+  Kiefer, auch den Mundinnenraum). Von hinten bleibt es bei Nase und Ohren. Live-Format: 9 Bytes mehr.
+  Schalter «Kopf und Mund (Gesichtsmodell)», kostet etwa 7 ms pro Bild.
+
 ## 27.11.2026: Rektifizierung und Genauigkeit des Zwei-Kamera-Trackings
 
 Erkenntnisse und Messungen zusammengefasst in [`docs/notizen-stereo-tracking.md`](../docs/notizen-stereo-tracking.md).

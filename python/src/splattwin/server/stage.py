@@ -26,21 +26,23 @@ MAX_PDF = 200 * 1024 * 1024
 MAX_SKIN = 64 * 1024 * 1024
 
 # Binaerformat eines Bildes (web/src/live/protocol.ts): Kopf 14 Bytes, je Gelenk 6, je Hand 21 * 6.
-FRAME_VERSION = 1
-FRAME_HEADER = 14
+FRAME_VERSION = 2
+FRAME_HEADER = 16
 BODY_JOINTS = 17
 HAND_BYTES = 21 * 6
+FACE_BYTES = 9  # Kopfdrehung 4 x i16 und Mund offen u8
 
 
 def frame_ok(data: bytes) -> bool:
     """Passt die Laenge zu Version, Gelenkmaske und Haenden? Mehr prueft der Server nicht."""
     if len(data) < FRAME_HEADER or data[0] != FRAME_VERSION:
         return False
-    flags, mask = data[1], int.from_bytes(data[10:14], "little")
+    flags, mask = data[1], int.from_bytes(data[12:16], "little")
     if mask >> BODY_JOINTS:
         return False
     hands = bool(flags & 4) + bool(flags & 8)
-    return len(data) == FRAME_HEADER + mask.bit_count() * 6 + hands * HAND_BYTES
+    face = FACE_BYTES if flags & 16 else 0
+    return len(data) == FRAME_HEADER + mask.bit_count() * 6 + hands * HAND_BYTES + face
 
 
 class Stage:

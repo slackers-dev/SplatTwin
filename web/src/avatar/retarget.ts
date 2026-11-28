@@ -27,6 +27,7 @@ const _z = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _pq = new THREE.Quaternion();
+const DOWN = new THREE.Vector3(0, -1, 0);
 
 type Vec = THREE.Vector3 | null | undefined;
 
@@ -52,6 +53,83 @@ function mid(a: THREE.Vector3, b: THREE.Vector3, out: THREE.Vector3): THREE.Vect
   return out.addVectors(a, b).multiplyScalar(0.5);
 }
 
+/**
+ * Knie fuer ein Bein von hip nach ankle mit Oberschenkel a und Unterschenkel b (Kosinussatz). Das Knie
+ * knickt Richtung pole; liegt pole auf der Linie, Richtung fallback. Zu weit: Bein gestreckt.
+ */
+export function twoBoneKnee(
+  hip: THREE.Vector3,
+  ankle: THREE.Vector3,
+  a: number,
+  b: number,
+  pole: THREE.Vector3,
+  fallback: THREE.Vector3,
+): THREE.Vector3 {
+  const axis = new THREE.Vector3().subVectors(ankle, hip);
+  const dist = THREE.MathUtils.clamp(axis.length(), Math.abs(a - b) + 1e-4, a + b - 1e-6);
+  if (axis.lengthSq() < 1e-10) axis.set(0, -1, 0);
+  axis.normalize();
+  const along = (a * a - b * b + dist * dist) / (2 * dist);
+  const side = Math.sqrt(Math.max(0, a * a - along * along));
+  const bend = new THREE.Vector3().subVectors(pole, hip);
+  bend.addScaledVector(axis, -bend.dot(axis));
+  if (bend.lengthSq() < 1e-8) bend.copy(fallback).addScaledVector(axis, -fallback.dot(axis));
+  if (bend.lengthSq() < 1e-8) bend.set(0, 0, 1);
+  return hip.clone().addScaledVector(axis, along).addScaledVector(bend.normalize(), side);
+}
+
+interface LegRig {
+  side: (typeof SIDES)[number];
+  up: THREE.Bone;
+  leg: THREE.Bone;
+  foot: THREE.Bone;
+  toe: THREE.Bone | undefined;
+  thigh: number;
+  shin: number;
+  ankle: number;
+}
+
+/** Was apply ausser den Punkten bekommen kann. */
+export interface ApplyOptions {
+  /**
+   * Hoehe der Huefte relativ zum aufrechten Stehen in Metern (core/height): negativ in der Hocke,
+   * positiv im Sprung. Dann steht die Figur auf dieser Hoehe, und die Beine knicken so ein, dass die
+   * Fuesse auf dem Boden bleiben (auch wenn die Kamera die Beine nicht sieht). null: wie bisher
+   * bleibt der tiefste Fuss auf dem Boden.
+   */
+  height?: number | null;
+  /**
+   * Zeit seit dem letzten apply in Sekunden. Dann dreht sich kein Knochen schneller und ruckartiger,
+   * als es ein Koerper kann (siehe MAX_TURN_SPEED): Ausreisser und Spruenge werden zu einer kurzen,
+   * weichen Bewegung. Ohne dt: jede Haltung sofort.
+   */
+  dt?: number;
+  /**
+   * Kopf und Mund aus dem Gesichtsmodell (core/face): Drehung des Kopfes, Blick in die Kamera = keine
+   * Drehung, und Mund offen 0..1. Dann folgt der Kopf dieser Drehung statt Nase und Ohren, und ein
+   * Kiefergelenk (SMPL-X: Jaw) oeffnet sich mit. null: Kopf aus Nase und Ohren wie bisher.
+   */
+  face?: { q: [number, number, number, number]; jaw: number } | null;
+}
+
+// Kiefer: jawOpen von MediaPipe liegt beim Sprechen meist bei 0.2 bis 0.5, darum verstaerkt (JAW_GAIN).
+// Ganz offen 16 Grad: beim Splat von ExAvatar sah mehr unnatuerlich aus (Mundinnenraum zu gross).
+const JAW_MAX = 0.28; // rad
+const JAW_GAIN = 1.6;
+
+// Grenzen fuer die Drehung eines Knochens. Schnelle Armbewegungen erreichen etwa 700 Grad/s, eine
+// Messung, die von einem Bild zum naechsten um 90 Grad springt, waere 2700 Grad/s.
+const MAX_TURN_SPEED = 12; // rad/s
+const MAX_TURN_ACCEL = 150; // rad/s^2: von Ruhe auf volle Geschwindigkeit in 0,08 s
+
+// So wenig Unterschied gilt noch als Stehen (Rauschen der Messung). Nach oben mehr: Schwebende Fuesse
+// fallen staerker auf als leicht gebeugte Knie, und ein echter Sprung ist hoeher.
+const DEADZONE_DOWN = 0.03; // m
+const DEADZONE_UP = 0.06; // m
+const MAX_JUMP = 0.5; // m
+const MIN_HIP = 0.3; // tiefste Huefte als Anteil der Beinlaenge (ganz unten in der Hocke)
+const FLOOR_EPS = 0.01; // m: naeher am Boden gilt der Fuss als aufgesetzt
+
 export type Bones = Record<string, THREE.Bone | undefined> & Record<(typeof REQUIRED)[number], THREE.Bone>;
 
 export class Retargeter {
@@ -62,11 +140,19 @@ export class Retargeter {
   /** Weitere Skelette, die bei jedem apply dieselben Punkte bekommen (z. B. SMPL-X unter einem Splat). */
   readonly followers: Retargeter[] = [];
   private lowerPose: [THREE.Bone, THREE.Quaternion][] | null = null;
+  /** Letzte gezeigte Drehung und Drehschritt pro Knochen (Bewegungsbegrenzer). */
+  private readonly motion = new Map<THREE.Bone, { q: THREE.Quaternion; step: number }>();
   private readonly rest = new Map<THREE.Bone, { local: THREE.Quaternion; world: THREE.Quaternion }>();
   private readonly restBasisInv: THREE.Quaternion;
   private readonly hands: Partial<Record<(typeof SIDES)[number], { hand: THREE.Bone; restBasisInv: THREE.Quaternion }>> = {};
   private readonly footBones: THREE.Bone[];
   private readonly restFootY: number;
+  /** Beine fuer die Hoehe: Laengen und Hoehe des Knoechels ueber dem Boden in der Ruhehaltung. */
+  private readonly legs: LegRig[] = [];
+  private readonly restForward = new THREE.Vector3();
+  private readonly restLeft = new THREE.Vector3();
+  /** Hoehe der Hueftgelenke ueber dem Boden beim aufrechten Stehen (Beine gestreckt nach unten). */
+  private readonly standHipY: number;
 
   constructor(model: THREE.Object3D) {
     this.model = model;
@@ -102,6 +188,23 @@ export class Retargeter {
 
     this.footBones = [b.LeftToeBase ?? b.LeftFoot, b.RightToeBase ?? b.RightFoot];
     this.restFootY = this.lowestFoot();
+
+    _z.crossVectors(left, up);
+    this.restForward.copy(_z).normalize();
+    this.restLeft.copy(left).normalize();
+    for (const side of SIDES) {
+      const up = b[`${side}UpLeg`],
+        leg = b[`${side}Leg`],
+        foot = b[`${side}Foot`],
+        toe = b[`${side}ToeBase`];
+      const H = this.pos(up, new THREE.Vector3()),
+        K = this.pos(leg, new THREE.Vector3()),
+        A = this.pos(foot, new THREE.Vector3());
+      // Knoechel ueber dem Boden, wenn der Fuss flach steht: so hoch wie ueber der Zehe in der Ruhehaltung.
+      const ankle = toe ? Math.max(0, A.y - this.pos(toe, _v1).y) : 0;
+      this.legs.push({ side, up, leg, foot, toe, thigh: H.distanceTo(K), shin: K.distanceTo(A), ankle });
+    }
+    this.standHipY = Math.min(...this.legs.map((l) => l.thigh + l.shin + l.ankle));
   }
 
   private pos(bone: THREE.Bone, out: THREE.Vector3): THREE.Vector3 {
@@ -134,14 +237,142 @@ export class Retargeter {
     bone.quaternion.premultiply(_pq).premultiply(_q).premultiply(_pq.invert());
   }
 
-  private aimLegs(P: Points, lHip: Vec, rHip: Vec): void {
+  /** Dreht einen Knochen so, dass er in Richtung dir (Welt) zeigt. */
+  private aimDir(bone: THREE.Bone | undefined, child: THREE.Bone | undefined, dir: THREE.Vector3): void {
+    if (!bone || !child) return;
+    const from = this.pos(bone, new THREE.Vector3());
+    this.aim(bone, child, from, from.clone().add(dir));
+  }
+
+  /**
+   * Beine: getrackte Punkte, wo vorhanden. Fehlt ein Punkt (ausserhalb des Bildes, zu unsicher),
+   * haengt das Bein gerade nach unten statt in der Ruhehaltung der Aufnahme zu bleiben. Die kann
+   * gespreizt sein (ExAvatar steht als X). Der Fuss bleibt dann flach und dreht nur mit dem Becken.
+   * P = null: ganz ohne Punkte (nur Oberkoerper ohne festgehaltene Haltung).
+   */
+  private aimLegs(P: Points | null, lHip: Vec, rHip: Vec): void {
     const b = this.bones;
-    this.aim(b.LeftUpLeg, b.LeftLeg, lHip, P[LM.lKn]);
-    this.aim(b.LeftLeg, b.LeftFoot, P[LM.lKn], P[LM.lAn]);
-    this.aim(b.LeftFoot, b.LeftToeBase, P[LM.lAn], P[LM.lToe]);
-    this.aim(b.RightUpLeg, b.RightLeg, rHip, P[LM.rKn]);
-    this.aim(b.RightLeg, b.RightFoot, P[LM.rKn], P[LM.rAn]);
-    this.aim(b.RightFoot, b.RightToeBase, P[LM.rAn], P[LM.rToe]);
+    const hipsTurn = b.Hips.getWorldQuaternion(new THREE.Quaternion()).multiply(
+      this.rest.get(b.Hips)!.world.clone().invert(),
+    );
+    for (const [side, hip, kn, an, toe] of [
+      ['Left', lHip, LM.lKn, LM.lAn, LM.lToe],
+      ['Right', rHip, LM.rKn, LM.rAn, LM.rToe],
+    ] as const) {
+      const up = b[`${side}UpLeg`],
+        leg = b[`${side}Leg`],
+        foot = b[`${side}Foot`],
+        toeBone = b[`${side}ToeBase`];
+      const K = P?.[kn],
+        A = P?.[an],
+        T = P?.[toe];
+      if (hip && K) this.aim(up, leg, hip, K);
+      else this.aimDir(up, leg, DOWN);
+      // Ohne Knoechel: Unterschenkel in Verlaengerung des Oberschenkels (gestrecktes Bein).
+      if (K && A) this.aim(leg, foot, K, A);
+      else this.aimDir(leg, foot, this.pos(leg, new THREE.Vector3()).sub(this.pos(up, _v1)));
+      if (A && T) this.aim(foot, toeBone, A, T);
+      else {
+        // Fuss flach wie in der Ruhehaltung, nur mit dem Becken gedreht.
+        _q.copy(hipsTurn).multiply(this.rest.get(foot)!.world);
+        foot.parent!.getWorldQuaternion(_pq).invert();
+        foot.quaternion.copy(_pq).multiply(_q);
+      }
+    }
+  }
+
+  /**
+   * Stellt die Figur auf die gemessene Hoehe und knickt die Beine (Zwei-Knochen-IK), damit die Fuesse
+   * auf dem Boden bleiben. Getrackte Beine geben vor, wohin Knie und Fuss zeigen; ungesehene Beine
+   * stehen senkrecht unter der Huefte, das Knie knickt nach vorne.
+   */
+  private standAt(height: number, P: Points | null, lHip: Vec, rHip: Vec): void {
+    const legLen = this.standHipY;
+    let d = height < 0 ? Math.min(0, height + DEADZONE_DOWN) : Math.max(0, height - DEADZONE_UP);
+    d = THREE.MathUtils.clamp(d, -(1 - MIN_HIP) * legLen, MAX_JUMP);
+
+    // Hueftgelenke auf Hoehe standHipY + d ueber dem Boden. Der Boden liegt in Weltkoordinaten bei
+    // restFootY (dort standen die Zehen in der Ruhehaltung).
+    const floor = this.restFootY;
+    const hipNow = (this.pos(this.legs[0]!.up, _v1).y + this.pos(this.legs[1]!.up, _v2).y) / 2;
+    this.model.position.y += floor + legLen + d - hipNow;
+    this.model.updateMatrixWorld(true);
+
+    const b = this.bones;
+    const hipsTurn = b.Hips.getWorldQuaternion(new THREE.Quaternion()).multiply(this.rest.get(b.Hips)!.world.clone().invert());
+    const forward = this.restForward.clone().applyQuaternion(hipsTurn).setY(0);
+    if (forward.lengthSq() < 1e-6) forward.copy(this.restForward);
+    forward.normalize();
+    // Nur die Drehung um die senkrechte Achse: ein aufgesetzter Fuss bleibt flach.
+    const yaw = new THREE.Quaternion().setFromUnitVectors(_v1.copy(this.restForward).setY(0).normalize(), forward);
+
+    for (const rig of this.legs) {
+      const hip = this.pos(rig.up, new THREE.Vector3());
+      const L = rig.side === 'Left';
+      const K = P?.[L ? LM.lKn : LM.rKn],
+        A = P?.[L ? LM.lAn : LM.rAn],
+        T = P?.[L ? LM.lToe : LM.rToe];
+      const H = L ? lHip : rHip;
+      const ankle = new THREE.Vector3(),
+        pole = new THREE.Vector3();
+      if (H && K && A) {
+        // Richtung der getrackten Glieder, Laengen des Avatars.
+        const knee = hip.clone().addScaledVector(_v1.subVectors(K, H).normalize(), rig.thigh);
+        ankle.copy(knee).addScaledVector(_v1.subVectors(A, K).normalize(), rig.shin);
+        pole.copy(knee);
+      } else {
+        ankle.set(hip.x, hip.y - rig.thigh - rig.shin, hip.z);
+        pole.copy(hip).addScaledVector(forward, 1).addScaledVector(DOWN, rig.thigh);
+      }
+      const planted = ankle.y <= floor + rig.ankle + FLOOR_EPS;
+      if (planted) ankle.y = floor + rig.ankle;
+      const knee = twoBoneKnee(hip, ankle, rig.thigh, rig.shin, pole, forward);
+      this.aim(rig.up, rig.leg, hip, knee);
+      this.aim(rig.leg, rig.foot, knee, ankle);
+      if (!planted && A && T) this.aim(rig.foot, rig.toe, A, T);
+      // Fuss flach (nur mit dem Becken gedreht), wenn er aufsteht oder die Zehe sonst im Boden steckt.
+      if (planted || !A || !T || (rig.toe && this.pos(rig.toe, _v1).y < floor)) {
+        _q.copy(yaw).multiply(this.rest.get(rig.foot)!.world);
+        rig.foot.parent!.getWorldQuaternion(_pq).invert();
+        rig.foot.quaternion.copy(_pq).multiply(_q);
+      }
+    }
+  }
+
+  /**
+   * Jeder Knochen dreht sich hoechstens mit MAX_TURN_SPEED und beschleunigt hoechstens mit
+   * MAX_TURN_ACCEL Richtung seiner neuen Haltung. Normale Bewegungen kommen unveraendert durch.
+   */
+  private limitMotion(dt: number): void {
+    for (const bone of this.rest.keys()) {
+      const prev = this.motion.get(bone);
+      if (!prev) {
+        this.motion.set(bone, { q: bone.quaternion.clone(), step: 0 });
+        continue;
+      }
+      const angle = prev.q.angleTo(bone.quaternion);
+      const step = Math.min(angle, MAX_TURN_SPEED * dt, prev.step + MAX_TURN_ACCEL * dt * dt);
+      if (step < angle) {
+        _q.copy(bone.quaternion);
+        bone.quaternion.copy(prev.q).rotateTowards(_q, step);
+      }
+      prev.q.copy(bone.quaternion);
+      prev.step = step;
+    }
+    this.model.updateMatrixWorld(true);
+  }
+
+  /** Kiefer oeffnen: um die Querachse des Kopfes, Kinn nach unten. Ohne Kiefergelenk (Roboter) nichts. */
+  private openJaw(open: number): void {
+    const jaw = this.bones.Jaw;
+    if (!jaw || !(open > 0)) return;
+    // Querachse des Kopfes in der Welt: die Ruhe-Querachse mit der Drehung des Kopfes seit der Ruhehaltung.
+    const head = this.bones.Head;
+    const turn = head.getWorldQuaternion(new THREE.Quaternion()).multiply(this.rest.get(head)!.world.clone().invert());
+    const axis = _v1.copy(this.restLeft).applyQuaternion(turn);
+    _q.setFromAxisAngle(axis, Math.min(1, open * JAW_GAIN) * JAW_MAX).multiply(jaw.getWorldQuaternion(_pq));
+    jaw.parent!.getWorldQuaternion(_pq).invert();
+    jaw.quaternion.copy(_pq).multiply(_q);
   }
 
   /** Merkt sich die aktuelle Haltung von Huefte und Beinen fuer den Modus "nur Oberkoerper". */
@@ -153,7 +384,7 @@ export class Retargeter {
   }
 
   /** P: 33 Koerperpunkte. hands: je 21 Handpunkte oder null. */
-  apply(P: Points, hands: HandPoints = {}): void {
+  apply(P: Points, hands: HandPoints = {}, options: ApplyOptions = {}): void {
     const b = this.bones;
     for (const [bone, rest] of this.rest) bone.quaternion.copy(rest.local);
     const upper = this.upperBodyOnly;
@@ -183,7 +414,11 @@ export class Retargeter {
     const nose = P[LM.nose],
       lEar = P[LM.lEar],
       rEar = P[LM.rEar];
-    if (nose && lEar && rEar) {
+    const face = options.face;
+    if (face) {
+      this.orient(b.Head, basis.set(face.q[0], face.q[1], face.q[2], face.q[3]));
+      this.openJaw(face.jaw);
+    } else if (nose && lEar && rEar) {
       left.subVectors(lEar, rEar).normalize();
       const fwd = a.subVectors(nose, mid(lEar, rEar, c)).applyAxisAngle(left, -HEAD_PITCH_OFFSET);
       up.crossVectors(fwd, left);
@@ -196,6 +431,8 @@ export class Retargeter {
     this.aim(b.RightForeArm, b.RightHand, P[LM.rEl], P[LM.rWr]);
 
     if (!upper) this.aimLegs(P, lHip, rHip);
+    // Nur Oberkoerper ohne festgehaltene Haltung (z. B. SMPL-X-Mitlaeufer): Beine gerade.
+    else if (!this.lowerPose) this.aimLegs(null, null, null);
 
     for (const side of SIDES) {
       const H = hands[side];
@@ -215,12 +452,17 @@ export class Retargeter {
       }
     }
 
-    // Tiefster Fuss bleibt auf dem Boden.
-    this.model.position.y = this.restFootY - this.lowestFoot();
+    const height = options.height;
+    if (height === null || height === undefined || !Number.isFinite(height)) {
+      // Tiefster Fuss bleibt auf dem Boden.
+      this.model.position.y = this.restFootY - this.lowestFoot();
+    } else this.standAt(height, upper ? null : P, lHip, rHip);
+
+    if (options.dt !== undefined && options.dt > 0) this.limitMotion(Math.min(options.dt, 0.1));
 
     for (const f of this.followers) {
       f.upperBodyOnly = upper;
-      f.apply(P, hands);
+      f.apply(P, hands, options);
     }
   }
 }

@@ -8,6 +8,7 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
+<iframe id="stageView" title="Bühne" hidden></iframe>
 
 <div id="panel">
   <h1>Splattwin · Live-Avatar</h1>
@@ -28,8 +29,10 @@
 
   <label class="check" style="margin-top:10px"><input id="debug" type="checkbox" checked> Skelett anzeigen</label>
   <label class="check"><input id="fingers" type="checkbox" checked> Finger tracken</label>
+  <label class="check"><input id="face" type="checkbox" checked> Kopf und Mund (Gesichtsmodell)</label>
   <label class="check"><input id="upper" type="checkbox"> Nur Oberkörper (Hüfte und Beine stehen still)</label>
   <label class="check"><input id="move" type="checkbox" checked> Bewegung im Raum</label>
+  <label class="check"><input id="height" type="checkbox" checked> In die Knie gehen (Höhe der Hüfte messen)</label>
   <label class="check"><input id="mirror" type="checkbox"> Spiegeln</label>
   <label class="check"><input id="splat" type="checkbox" disabled> Splat statt Roboter</label>
   <div id="splatView" hidden>
@@ -50,6 +53,7 @@
     <label>Name<input id="liveName" maxlength="24" placeholder="z. B. Kev"></label>
   </div>
   <label class="check"><input id="liveLite" type="checkbox" checked> Sparmodus beim Senden (Vorschau hier nur 15 Bilder/s)</label>
+  <label class="check"><input id="stageToggle" type="checkbox"> Bühnenansicht (volle Vorschau, sendet auf die Bühne)</label>
 
   <h2>Zweite Kamera (Stereo)</h2>
   <select id="cameraB" hidden></select>

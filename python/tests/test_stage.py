@@ -18,12 +18,12 @@ PASSWORDS = {"A": "pw-a", "B": "pw-b"}
 PRESENT = "present.localhost:8931"
 
 
-def frame(joints=17, left=False, right=False, version=1) -> bytes:
+def frame(joints=17, left=False, right=False, version=2, face=False) -> bytes:
     """Bild im Format von web/src/live/protocol.ts (Inhalt egal, nur die Laenge zaehlt)."""
     mask = (1 << joints) - 1
-    flags = (4 if left else 0) | (8 if right else 0)
-    head = struct.pack("<BBIhhI", version, flags, 1234, 0, 0, mask)
-    return head + bytes(joints * 6 + (left + right) * 126)
+    flags = (4 if left else 0) | (8 if right else 0) | (16 if face else 0)
+    head = struct.pack("<BBIhhhI", version, flags, 1234, 0, 0, 0, mask)
+    return head + bytes(joints * 6 + (left + right) * 126 + (9 if face else 0))
 
 
 @pytest.fixture
@@ -58,12 +58,14 @@ def login(c, slot="A", password=None):
 def test_frame_length_must_match_mask_and_hands():
     assert frame_ok(frame())
     assert frame_ok(frame(joints=5, left=True, right=True))
+    assert frame_ok(frame(joints=5, right=True, face=True))
+    assert not frame_ok(frame(face=True)[:-9])  # Gesicht angemeldet, aber nicht dabei
     assert not frame_ok(frame()[:-1])
     assert not frame_ok(frame() + b"x")
-    assert not frame_ok(frame(version=2))
+    assert not frame_ok(frame(version=1))
     assert not frame_ok(b"\x01")
     too_many = bytearray(frame())
-    too_many[10:14] = (1 << 20).to_bytes(4, "little")  # Gelenk 21 gibt es nicht
+    too_many[12:16] = (1 << 20).to_bytes(4, "little")  # Gelenk 21 gibt es nicht
     assert not frame_ok(bytes(too_many))
 
 

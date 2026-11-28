@@ -108,6 +108,7 @@ def test_devices_in_the_network_may_only_watch(dirs):
     [
         ("/live.html", True), ("/assets/live-Ab12_x.js", True), ("/models/Xbot.glb", True),
         ("/runs/scan-1/splat.ply", True), ("/runs/scan-1/skin.bin", True), ("/stage/slides.pdf", True),
+        ("/runs/ex-1/smplx.json", True), ("/runs/ex-1/smplx_skin.bin", True),
         ("/ws/stage", True), ("/api/info", True), ("/", True),
         ("/tracking.html", False), ("/control.html", False), ("/api/calibrate", False), ("/ws/send", False),
         ("/api/slide", False), ("/stage/slides.json", False), ("/runs/scan-1/frames/a_0001.png", False),

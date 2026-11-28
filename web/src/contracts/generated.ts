@@ -126,6 +126,10 @@ export interface LiveFrame {
    */
   pos: [number, number];
   /**
+   * Höhe der Hüfte relativ zum aufrechten Stehen in Metern (in die Knie: negativ, Sprung: positiv), null wenn unbekannt oder ausgeschaltet. Der Avatar steht auf dieser Höhe, die Beine knicken ein.
+   */
+  height: number | null;
+  /**
    * 33 Gelenke von MediaPipe Pose, null = unbekannt. Übertragen werden nur die 17, die der Avatar braucht.
    *
    * @minItems 33
@@ -135,6 +139,17 @@ export interface LiveFrame {
   hands: {
     Left: Hand;
     Right: Hand;
+  };
+  /**
+   * Kopf und Mund aus dem Gesichtsmodell: Drehung des Kopfes als Quaternion [x, y, z, w] in den Achsen des Avatars (Blick in die Kamera = keine Drehung) und jaw = Mund offen 0..1. null ohne Gesicht (z. B. von hinten): Der Kopf folgt dann Nase und Ohren.
+   */
+  face: null | {
+    /**
+     * @minItems 4
+     * @maxItems 4
+     */
+    q: [number, number, number, number];
+    jaw: number;
   };
 }
 
