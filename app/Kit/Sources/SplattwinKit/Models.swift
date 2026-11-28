@@ -1,7 +1,7 @@
 import Foundation
 
 /// Version des Protokolls zwischen Handy und Mac. Bei jeder unvertraeglichen Aenderung erhoehen.
-public let protocolVersion = 1
+public let protocolVersion = 2 // 2: Quittung pro Livebild (frameAck)
 
 public enum Lens: String, Codable, CaseIterable, Sendable {
     case ultraWide, wide, tele, front, external
@@ -53,7 +53,8 @@ public struct CameraConfig: Codable, Equatable, Sendable {
     public var tint: Double?
     /// Livebild fuer Vorschau und Tracking (H-7, T-1).
     public var streamEnabled = true
-    public var streamMaxSide = 1280
+    /// 640: ein Viertel der Daten von 1280, reicht fuers Tracking (MediaPipe rechnet intern mit ~256 px).
+    public var streamMaxSide = 640
     public var streamFPS = 30
     public var streamQuality = 0.6
 
@@ -277,6 +278,11 @@ public struct HubHello: Codable, Equatable, Sendable {
     }
 }
 
+public struct FrameAck: Codable, Equatable, Sendable {
+    public var seq: Int
+    public init(seq: Int) { self.seq = seq }
+}
+
 public struct Ping: Codable, Equatable, Sendable {
     public var t1: Double
     public init(t1: Double) { self.t1 = t1 }
@@ -299,6 +305,8 @@ public enum Message: Codable, Equatable, Sendable {
     case fetch(FetchRequest)
     case delete(FetchRequest)
     case confirmPosition
+    /// Livebild angekommen: erst danach schickt das Geraet weitere (kein Stau im WLAN).
+    case frameAck(FrameAck)
     // Geraet -> Mac
     case welcome(NodeHello)
     case pong(Pong)

@@ -90,12 +90,12 @@ struct CamerasView: View {
     @ViewBuilder private var discovery: some View {
         let open = model.hub.found.filter { model.hub.camera($0.name) == nil }
         if !open.isEmpty {
-            GroupBox("Geräte im Netz") {
+            GroupBox("Geräte im Netz und am Kabel") {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(open) { item in
                         HStack {
-                            Image(systemName: "iphone.gen3")
-                            Text(item.name)
+                            Image(systemName: item.wired ? "cable.connector" : "iphone.gen3")
+                            Text(item.wired ? "\(item.name) (Kabel)" : item.name)
                             Spacer()
                             TextField("Code vom Handy", text: Binding(get: { codes[item.name] ?? "" }, set: { codes[item.name] = $0 }))
                                 .frame(width: 130)
@@ -126,7 +126,7 @@ struct CameraTile: View {
                             Text(key.uppercased()).bold().padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(.green.opacity(0.85), in: RoundedRectangle(cornerRadius: 5))
                         }
-                        Text(camera.name).padding(.horizontal, 7).padding(.vertical, 2)
+                        Text(camera.wired ? "\(camera.name) · Kabel" : camera.name).padding(.horizontal, 7).padding(.vertical, 2)
                             .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
                     }
                     .foregroundStyle(.white)

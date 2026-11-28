@@ -301,7 +301,7 @@ final class AppModel: ObservableObject {
         camera.config.fps = 30
         if preset == .scan { camera.config.rotation = 90 }
         camera.config.streamEnabled = true
-        camera.config.streamMaxSide = 1280
+        camera.config.streamMaxSide = 640
         camera.config.streamFPS = 30
         // Andere Linse, anderes Licht auf dem Sensor: Belichtung und Weissabgleich neu einpendeln lassen.
         camera.config.exposure = .auto

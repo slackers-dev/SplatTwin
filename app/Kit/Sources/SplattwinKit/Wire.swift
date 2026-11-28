@@ -66,6 +66,10 @@ public enum Clock {
 
 public enum Link {
     public static let serviceType = "_splattwin._tcp"
+    /// Feste Anschluesse auf dem Handy fuer die Verbindung per USB-Kabel (nur ueber das Kabel erreichbar):
+    /// die verschluesselte Verbindung wie im WLAN und eine kleine Auskunft mit dem Geraetenamen.
+    public static let wiredPort: UInt16 = 48931
+    public static let wiredInfoPort: UInt16 = 48930
 
     /// Verschluesselte Verbindung, deren Schluessel aus dem Kopplungscode entsteht: ohne den
     /// Code kommt keine Verbindung zustande, und niemand im selben Netz kann mitsehen (D-3).
@@ -102,9 +106,12 @@ public final class Peer {
     public var onPacket: ((Packet) -> Void)?
     public var onReady: (() -> Void)?
     public var onClosed: ((String?) -> Void)?
-    /// Bilder, die noch nicht auf der Leitung sind. Ist die Leitung zu langsam, werden neue
-    /// Bilder verworfen statt gestaut, damit die Verzoegerung nicht waechst (T-1).
+    /// Bilder, deren Ankunft der Mac noch nicht quittiert hat. Ist die Leitung zu langsam, werden
+    /// neue Bilder verworfen statt gestaut, damit die Verzoegerung nicht waechst (T-1). Frueher
+    /// zaehlte ein Bild als erledigt, sobald es im Sendepuffer lag: Der fasst im WLAN Bilder fuer
+    /// mehr als eine Sekunde, und genau so lange hinkte das Livebild hinterher.
     public private(set) var framesInFlight = 0
+    private var lastAck = Date.distantPast
     private var closed = false
 
     public init(connection: NWConnection, queue: DispatchQueue) {
@@ -140,12 +147,18 @@ public final class Peer {
 
     /// Sendet ein Livebild nur, wenn die vorherigen schon unterwegs sind. Rueckgabe false = verworfen.
     public func sendFrame(_ packet: Packet) -> Bool {
+        // Sicherheitsnetz: bleibt die Quittung aus (z. B. aelterer Mac), nach 2 s weitersenden.
+        if framesInFlight >= 2, Date().timeIntervalSince(lastAck) > 2 { framesInFlight = 0 }
         guard framesInFlight < 2 else { return false }
         framesInFlight += 1
-        connection.send(content: packet.encoded, completion: .contentProcessed { [weak self] _ in
-            self?.queue.async { self?.framesInFlight -= 1 }
-        })
+        connection.send(content: packet.encoded, completion: .contentProcessed { _ in })
         return true
+    }
+
+    /// Der Mac hat ein Bild erhalten. Auf `queue` aufrufen.
+    public func frameAcknowledged() {
+        framesInFlight = max(0, framesInFlight - 1)
+        lastAck = Date()
     }
 
     public func cancel() {

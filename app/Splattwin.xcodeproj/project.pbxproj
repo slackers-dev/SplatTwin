@@ -39,7 +39,7 @@
 		C90C1EFE368D846AFF933AAA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		E1C59A6A08C472CC67F9306B /* Kit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Kit; path = Kit; sourceTree = SOURCE_ROOT; };
 		F5211350E554FBD316C969E7 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
-		"TEMP_12DCD9A9-C548-43EB-B529-3BA6AB52C1C6" /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
+		"TEMP_F2D492F4-67AC-4564-9B3C-AD8AE24C92D3" /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -124,10 +124,10 @@
 			);
 			sourceTree = "<group>";
 		};
-		"TEMP_4EB8A1D0-E0F9-41C7-938E-E77CE3EE9D43" /* app */ = {
+		"TEMP_D257E8A0-8C21-4802-85EB-3C6EC1B9C189" /* app */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_12DCD9A9-C548-43EB-B529-3BA6AB52C1C6" /* Local.xcconfig */,
+				"TEMP_F2D492F4-67AC-4564-9B3C-AD8AE24C92D3" /* Local.xcconfig */,
 			);
 			path = app;
 			sourceTree = "<group>";
@@ -265,7 +265,7 @@
 /* Begin XCBuildConfiguration section */
 		098EA5F2736977F06DF1B583 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_12DCD9A9-C548-43EB-B529-3BA6AB52C1C6" /* Local.xcconfig */;
+			baseConfigurationReference = "TEMP_F2D492F4-67AC-4564-9B3C-AD8AE24C92D3" /* Local.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -352,7 +352,7 @@
 		};
 		490DEEDE66F318509DC78C98 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_12DCD9A9-C548-43EB-B529-3BA6AB52C1C6" /* Local.xcconfig */;
+			baseConfigurationReference = "TEMP_F2D492F4-67AC-4564-9B3C-AD8AE24C92D3" /* Local.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

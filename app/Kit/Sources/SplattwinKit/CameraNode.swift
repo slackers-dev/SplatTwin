@@ -36,6 +36,8 @@ public final class CameraNode {
     private let encoder = JPEGEncoder()
     private let lock = NSLock()
     private var listener: NWListener?
+    /// Zugang per USB-Kabel (nur auf dem Handy): Verbindung und Namensauskunft.
+    private var wired: [NWListener] = []
     private var control: Peer?
     private var others: [ObjectIdentifier: Peer] = [:]
     private var timer: DispatchSourceTimer?
@@ -73,8 +75,10 @@ public final class CameraNode {
             if case .ready = state, let port = listener.port?.rawValue { self?.onReady?(port) }
         }
         listener.start(queue: queue)
+        let wired = advertise ? startWired() : []
         queue.async {
             self.listener = listener
+            self.wired = wired
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now() + 1, repeating: 1)
             timer.setEventHandler { [weak self] in self?.sendStatus() }
@@ -84,6 +88,34 @@ public final class CameraNode {
         source.start()
     }
 
+    /// Feste Anschluesse nur auf diesem Geraet. Ein Mac erreicht sie ueber das USB-Kabel (usbmuxd),
+    /// sonst niemand im Netz. Die Verbindung selbst ist gleich verschluesselt wie im WLAN.
+    private func startWired() -> [NWListener] {
+        var list: [NWListener] = []
+        let link = Link.parameters(code: code)
+        link.requiredInterfaceType = .loopback
+        link.allowLocalEndpointReuse = true
+        if let port = NWEndpoint.Port(rawValue: Link.wiredPort), let listener = try? NWListener(using: link, on: port) {
+            listener.newConnectionHandler = { [weak self] in self?.accept($0) }
+            listener.start(queue: queue)
+            list.append(listener)
+        }
+        // Auskunft: nur der Name, damit der Mac das Kabel dem richtigen gekoppelten Handy zuordnet.
+        let plain = NWParameters.tcp
+        plain.requiredInterfaceType = .loopback
+        plain.allowLocalEndpointReuse = true
+        let info = (try? JSONEncoder().encode(["name": name])) ?? Data()
+        if let port = NWEndpoint.Port(rawValue: Link.wiredInfoPort), let listener = try? NWListener(using: plain, on: port) {
+            listener.newConnectionHandler = { [queue] connection in
+                connection.start(queue: queue)
+                connection.send(content: info, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
+            }
+            listener.start(queue: queue)
+            list.append(listener)
+        }
+        return list
+    }
+
     public func stop() {
         source.stop()
         queue.async {
@@ -91,6 +123,8 @@ public final class CameraNode {
             self.timer = nil
             self.listener?.cancel()
             self.listener = nil
+            self.wired.forEach { $0.cancel() }
+            self.wired = []
             self.control?.cancel()
             self.others.values.forEach { $0.cancel() }
         }
@@ -100,6 +134,8 @@ public final class CameraNode {
     public func setCode(_ code: String, advertise: Bool) {
         queue.sync {
             self.listener?.cancel()
+            self.wired.forEach { $0.cancel() }
+            self.wired = []
             self.control?.cancel()
             self.timer?.cancel()
         }
@@ -199,6 +235,8 @@ public final class CameraNode {
             sendFile(request.file, to: peer)
         case .delete(let request):
             if let url = fileURL(request.file) { try? FileManager.default.removeItem(at: url) }
+        case .frameAck:
+            peer.frameAcknowledged()
         case .confirmPosition:
             onConfirmPosition?()
             sendStatus()
