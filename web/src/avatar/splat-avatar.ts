@@ -18,25 +18,10 @@ import { type JointName, LM } from '../core/landmarks';
 import type { Points } from './points';
 import type { Retargeter } from './retarget';
 import { decodeSkin, encodeSkin, fetchSkin, type Skin, uploadSkin } from './skin-cache';
+import { loadSmplxAvatar } from './smplx-avatar';
+import { robotMeshes, type SplatAvatar, splatAvatar } from './splat-view';
 
-export interface SplatView {
-  /** Splat statt Roboter zeigen */
-  splat: boolean;
-  /** Roboter durchsichtig unter dem Splat, 0 = aus */
-  robotOpacity: number;
-  splatOpacity: number;
-  /** durchsichtigen Roboter als Drahtgitter */
-  wireframe: boolean;
-}
-
-export interface SplatAvatar {
-  count: number;
-  /** Teilweise Aenderung, z. B. setView({ robotOpacity: 0.4 }). */
-  setView(change: Partial<SplatView>): void;
-  setVisible(on: boolean): void;
-  /** Splat entfernen (z. B. anderer Lauf), der Roboter ist danach wieder sichtbar. */
-  dispose(): void;
-}
+export type { SplatAvatar, SplatView } from './splat-view';
 
 export interface SplatAvatarOptions {
   /** Jeden Koerperteil einfaerben, um die Zuteilung der Kleckse zu pruefen. */
@@ -108,6 +93,9 @@ export async function loadSplatAvatar(
 ): Promise<SplatAvatar> {
   const { debugParts = false, upload = false, noSkin = false } = options;
   const base = runUrl(run);
+  // Avatar von LHM++ mit SMPL-X-Skelett und Gewichten: ohne Roboter-Skelett verformen.
+  const smplx = await fetch(base + 'smplx.json');
+  if (smplx.ok) return loadSmplxAvatar(scene, renderer, retargeter, run, await smplx.json(), { debugParts });
   const [pose, rig] = await Promise.all([getJson<RunSplat>(base, 'splat.json', run), getJson<RunRig>(base, 'rig.json', run)]);
   // Alles Laden vor der Bindehaltung: danach laeuft alles ohne await durch, sodass neue Tracking-Bilder
   // das Skelett nicht mitten in der Rechnung verstellen (auf der Buehne laeuft das Tracking schon).
@@ -267,10 +255,7 @@ export async function loadSplatAvatar(
   };
 
   // Knochen des Roboters in der Bindehaltung: an ihnen haengt der Splat.
-  const robot: THREE.SkinnedMesh[] = [];
-  retargeter.model.traverse((o) => {
-    if ((o as THREE.SkinnedMesh).isSkinnedMesh) robot.push(o as THREE.SkinnedMesh);
-  });
+  const robot = robotMeshes(retargeter);
   const bones: THREE.Bone[] = [],
     boneIndex = new Map<THREE.Bone, number>();
   for (const m of robot) {
@@ -382,44 +367,8 @@ export async function loadSplatAvatar(
   if (!scene.children.some((o) => o instanceof SparkRenderer)) scene.add(new SparkRenderer({ renderer }));
   scene.add(mesh);
 
-  // Ansicht: Splat oder Roboter, oder beide uebereinander, um die Zuordnung zu pruefen.
-  // Der durchsichtige Roboter wird nach dem Splat gezeichnet (renderOrder) und schreibt
-  // keine Tiefe, liegt also als Schleier ueber dem Splat: Wo Roboter ohne Splat zu sehen
-  // ist oder Splat weit ueber den Roboter hinausragt, stimmt die Zuteilung nicht.
-  const robotMaterials = [...new Set(robot.flatMap((m) => ([] as THREE.Material[]).concat(m.material)))];
-  const castShadow = new Map(robot.map((m) => [m, m.castShadow]));
-  const view: SplatView = { splat: true, robotOpacity: 0, splatOpacity: 1, wireframe: false };
-  const applyView = () => {
-    const ghost = view.splat && view.robotOpacity > 0;
-    mesh.visible = view.splat;
-    mesh.opacity = view.splatOpacity;
-    for (const m of robot) {
-      m.visible = !view.splat || ghost;
-      m.renderOrder = ghost ? 1 : 0;
-      m.castShadow = ghost ? false : (castShadow.get(m) ?? true);
-    }
-    for (const mat of robotMaterials) {
-      mat.transparent = ghost;
-      mat.opacity = ghost ? view.robotOpacity : 1;
-      mat.depthWrite = !ghost;
-      if ('wireframe' in mat) (mat as THREE.MeshStandardMaterial).wireframe = ghost && view.wireframe;
-      mat.needsUpdate = true;
-    }
-  };
-  applyView();
-
-  const setView = (change: Partial<SplatView>) => {
-    Object.assign(view, change);
-    applyView();
-  };
-  return {
-    count: splats.length,
-    setView,
-    setVisible: (on) => setView({ splat: on }),
-    dispose: () => {
-      setView({ splat: false });
-      scene.remove(mesh);
-      mesh.dispose();
-    },
-  };
+  return splatAvatar(retargeter, mesh, splats.length, () => {
+    scene.remove(mesh);
+    mesh.dispose();
+  });
 }

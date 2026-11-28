@@ -44,7 +44,9 @@ final class LinkTests: XCTestCase {
         XCTAssertEqual(camera.hello?.name, "Testkamera")
         XCTAssertEqual(camera.hello?.lenses.first?.lens, .wide)
 
-        // Livebild: hochkant, verkleinert, mit Aufnahmezeit.
+        // Livebild: hochkant, verkleinert, mit Aufnahmezeit. Ohne Quittung vom Mac kaemen nur zwei Bilder.
+        camera.config.streamMaxSide = 1280
+        camera.apply()
         var headers: [FrameHeader] = []
         var hubTimes: [Double] = []
         let tap = camera.frames.add { header, _, hubTime in
@@ -173,6 +175,7 @@ final class WireTests: XCTestCase {
             .hello(HubHello(name: "Mac", role: "control")), .configure(config), .stopRecording,
             .phase(PhaseInfo(title: "Leerer Raum", color: "rec", speak: "Geh aus dem Bild")),
             .startRecording(RecordRequest(name: "scan_a", startAt: 100.25, clockOffset: -3.5)),
+            .frameAck(FrameAck(seq: 42)),
         ]
         for message in messages {
             XCTAssertEqual(Packet(message).decode(Message.self), message)

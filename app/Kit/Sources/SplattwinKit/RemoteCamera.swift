@@ -61,7 +61,10 @@ public final class RemoteCamera: ObservableObject, Identifiable {
     }
 
     public nonisolated let id: String
-    public nonisolated let endpoint: NWEndpoint
+    /// Weg zum Geraet: Bonjour im WLAN, per USB-Kabel ein Anschluss auf 127.0.0.1.
+    @Published public private(set) var endpoint: NWEndpoint
+    /// Verbunden ueber das USB-Kabel statt ueber das WLAN.
+    @Published public private(set) var wired = false
     public nonisolated let frames = FrameTap()
     @Published public var name: String
     @Published public var code: String
@@ -90,10 +93,11 @@ public final class RemoteCamera: ObservableObject, Identifiable {
     private var recorded: CheckedContinuation<RecordingInfo, Error>?
     private let counters = Counters()
 
-    public init(id: String, name: String, endpoint: NWEndpoint, code: String) {
+    public init(id: String, name: String, endpoint: NWEndpoint, code: String, wired: Bool = false) {
         self.id = id
         self.name = name
         self.endpoint = endpoint
+        self.wired = wired
         self.code = code
     }
 
@@ -117,6 +121,14 @@ public final class RemoteCamera: ObservableObject, Identifiable {
         open()
     }
 
+    /// Neuer Weg zum Geraet (Kabel angesteckt oder abgezogen): bestehende Verbindung neu aufbauen.
+    public func reroute(to endpoint: NWEndpoint, wired: Bool) {
+        guard endpoint != self.endpoint else { return }
+        self.endpoint = endpoint
+        self.wired = wired
+        if wanted { open() }
+    }
+
     public func disconnect() {
         wanted = false
         generation += 1
@@ -137,10 +149,12 @@ public final class RemoteCamera: ObservableObject, Identifiable {
         peer.onReady = { [weak peer] in
             peer?.send(.hello(HubHello(name: RemoteCamera.hostName, role: "control")))
         }
-        peer.onPacket = { [weak self] packet in
+        peer.onPacket = { [weak self, weak peer] packet in
             switch packet.kind {
             case .frame:
                 guard let header = packet.decode(FrameHeader.self) else { return }
+                // Sofort quittieren: das Geraet schickt erst danach das naechste Bild.
+                peer?.send(.frameAck(FrameAck(seq: header.seq)))
                 let now = Clock.now
                 let offset = counters.note(header, bytes: packet.body.count, now: now)
                 frames.emit(header, packet.body, header.time - offset)
@@ -442,6 +456,8 @@ public final class Hub: ObservableObject {
         public var id: String { name }
         public let name: String
         public let endpoint: NWEndpoint
+        /// am USB-Kabel
+        public var wired = false
     }
 
     @Published public private(set) var found: [Found] = []
@@ -450,6 +466,11 @@ public final class Hub: ObservableObject {
     private var browser: NWBrowser?
     private var watchers: [String: AnyCancellable] = [:]
     private let defaults: UserDefaults
+    private var network: [Found] = []
+    private var cabled: [Found] = []
+    #if os(macOS)
+    private let usb = USBWatcher()
+    #endif
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -469,21 +490,48 @@ public final class Hub: ObservableObject {
             let found = results.compactMap { result -> Found? in
                 guard case .service(let name, _, _, _) = result.endpoint else { return nil }
                 return Found(name: name, endpoint: result.endpoint)
-            }.sorted { $0.name < $1.name }
-            Task { @MainActor in self?.update(found) }
+            }
+            Task { @MainActor in
+                self?.network = found
+                self?.merge()
+            }
         }
         browser.stateUpdateHandler = { [weak self] state in
             Task { @MainActor in if case .ready = state { self?.browsing = true } }
         }
         browser.start(queue: .main)
         self.browser = browser
+        #if os(macOS)
+        // Handys am USB-Kabel: schneller und ohne WLAN, sonst gleich wie im Netz.
+        usb.onChange = { [weak self] devices in
+            MainActor.assumeIsolated {
+                self?.cabled = devices.map {
+                    Found(name: $0.name, endpoint: .hostPort(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: $0.port)!), wired: true)
+                }
+                self?.merge()
+            }
+        }
+        usb.start()
+        #endif
+    }
+
+    /// Kabel vor WLAN: ist ein Handy auf beiden Wegen da, gilt das Kabel.
+    private func merge() {
+        var byName: [String: Found] = [:]
+        for item in network { byName[item.name] = item }
+        for item in cabled { byName[item.name] = item }
+        update(byName.values.sorted { $0.name < $1.name })
     }
 
     private func update(_ list: [Found]) {
         found = list
-        // Bekannte Geraete sofort wieder verbinden.
-        for item in list where camera(item.name) == nil {
-            if let code = codes[item.name] { pair(item, code: code) }
+        for item in list {
+            if let camera = camera(item.name) {
+                camera.reroute(to: item.endpoint, wired: item.wired)
+            } else if let code = codes[item.name] {
+                // Bekannte Geraete sofort wieder verbinden.
+                pair(item, code: code)
+            }
         }
     }
 
@@ -496,7 +544,7 @@ public final class Hub: ObservableObject {
             existing.connect()
             return existing
         }
-        let camera = RemoteCamera(id: item.name, name: item.name, endpoint: item.endpoint, code: code)
+        let camera = RemoteCamera(id: item.name, name: item.name, endpoint: item.endpoint, code: code, wired: item.wired)
         add(camera)
         // Der Code wird erst gemerkt, wenn die Verbindung damit wirklich zustande kam.
         watchers[camera.id] = camera.$state.sink { [weak self, weak camera] state in

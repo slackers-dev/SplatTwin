@@ -1,6 +1,6 @@
 # Ein Einstieg fuer beide Haelften des Projekts. `make` zeigt die Ziele.
 .DEFAULT_GOAL := help
-.PHONY: help setup web serve dev test lint check swift-test clean
+.PHONY: help setup web serve dev test lint check swift-test clean lhm
 
 help: ## Ziele anzeigen
 	@grep -E "^[a-z-]+:.*## " $(MAKEFILE_LIST) | awk -F ":.*## " '{printf "  make %-11s %s\n", $$1, $$2}'
@@ -32,6 +32,10 @@ check: lint test ## Alles, was auch die CI prueft
 
 swift-test: ## Tests der App (Swift-Paket)
 	cd app/Kit && swift test
+
+lhm: ## RunPod (pod-do): Avatar aus Fotos, make lhm FOTOS=<ordner> [NAME=<name>]
+	@test -n "$(FOTOS)" || { echo "make lhm FOTOS=<ordner mit fotos> [NAME=<name>]"; exit 1; }
+	pod-do run lhm "$(FOTOS)" $(NAME)
 
 clean: ## Gebaute Dateien loeschen (nicht data/)
 	rm -rf web/dist web/.tsbuild

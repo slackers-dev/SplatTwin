@@ -6,27 +6,42 @@
 //
 // Die Klasse kennt keine Bedienelemente: die Seite gibt die Einstellungen pro Bild mit und
 // entscheidet, was sie mit dem Ergebnis macht (Avatar, Vorschau, Live senden).
-import type { HandLandmarker, NormalizedLandmark, PoseLandmarker } from '@mediapipe/tasks-vision';
+import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { type JointObservation, SkeletonEKF } from '../core/ekf';
-import { assignHands, type Hands, SIDES } from '../core/hands';
+import { assignHands, type HandDetection, type Hands, SIDES } from '../core/hands';
 import { KalmanPoint } from '../core/kalman';
+import { OneEuroGroup, OneEuroPoint, smoothingParams } from '../core/one-euro';
+import { limitBody, type LimitReport } from '../core/body-limits';
+import { PoseHold } from '../core/pose-hold';
 import { camToThree, HAND_COUNT, LM, type Landmark, POSE_COUNT } from '../core/landmarks';
 import { buildObs, calibrationFrame, type Measurement, measureMono, measureStereo } from '../core/measure';
 import { type CalibrationFrame, calibrate, type StereoCalibration, type StereoPose } from '../core/stereo';
-import { add, IDENTITY, scale, sub, type Vec3 } from '../core/vec';
+import { add, IDENTITY, type Mat3, mulMtV, scale, sub, type Vec3 } from '../core/vec';
 import type { CameraSetup } from './cameras';
+import type { CameraDetector } from './detection';
 import { FrameClock } from './frame-clock';
+import { type FacePose, mixFace } from '../core/face';
+import { StandingHeight } from '../core/height';
+import { Settle } from '../core/settle';
 
 const STALE_MS = 200; // aelter darf das Bild der zweiten Kamera nicht sein
+// So lange bleibt der EKF im Stereo-Modus, wenn Kamera B kurz ausfaellt (Bild zu alt, Person
+// verdeckt): Kamera A korrigiert allein weiter. Ohne diese Spanne setzte jeder kurze Aussetzer
+// den Filter zurueck, und die Figur sprang (Zucken nach dem Kalibrieren).
+const STEREO_HOLD_MS = 1500;
+// Hoechstens so viel aelter (Aufnahmezeit) darf das Bild von Kamera B sein als das von A. Kommen
+// die Handybilder verzoegert an (WLAN), passen die Gelenke beider Kameras nicht mehr zusammen:
+// Triangulation und EKF springen. Dann lieber mit einer Kamera weiter.
+const MAX_LAG_MS = 250;
+const FACE_HOLD_S = 0.4; // so lange haelt der Kopf seine Haltung, wenn das Gesicht kurz fehlt
 const LOST_TIMEOUT_FRAMES = 30; // danach gilt ein Gelenk als unbekannt (Ruhepose)
 const HAND_TIMEOUT_FRAMES = 15; // so lange laeuft eine verlorene Hand per Vorhersage weiter
 export const CALIB_SECONDS = 12;
 
+/** Erkennung je Kamera, jede in ihrem eigenen Strang (siehe detection.ts). */
 export interface Detectors {
-  pose: PoseLandmarker;
-  /** eigene Instanz fuer Kamera B: im Video-Modus merkt sich das Modell den Verlauf */
-  poseB: PoseLandmarker;
-  hands: HandLandmarker;
+  A: CameraDetector;
+  B: CameraDetector;
 }
 
 export interface TrackSettings {
@@ -35,6 +50,10 @@ export interface TrackSettings {
   /** Messrauschen in m */
   sigmaZ: number;
   fingers: boolean;
+  /** Kopf und Mund mit dem Gesichtsmodell (nur Kamera A) */
+  face?: boolean;
+  /** adaptive Glaettung nach dem Filter, 0 = aus, 1 = sehr ruhig */
+  smoothing: number;
 }
 
 export type CalibrationProgress =
@@ -53,12 +72,22 @@ export interface TrackFrame {
   filtered: (Vec3 | null)[];
   rawHands: Hands<Vec3[]>;
   filteredHands: Hands<Vec3[]>;
+  /** Wie oft Koerpergrenzen eingegriffen haben (nur gefilterte Punkte). */
+  limits: LimitReport;
   /** Position im Raum (x, 0, z): Messung und gefiltert; origin = Bezugspunkt fuer "Bewegung im Raum" */
   rawRoot: Vec3 | null;
   root: Vec3 | null;
   origin: Vec3 | null;
+  /** Hoehe der Huefte relativ zum aufrechten Stehen in m (in die Knie: negativ), null wenn unbekannt */
+  height: number | null;
+  /** Kopf und Mund aus dem Gesichtsmodell, geglaettet; null ohne Gesicht (z. B. von hinten) */
+  face: FacePose | null;
   mode: 'mono' | 'stereo';
   nTri: number;
+  /** Wechsel zwischen Stereo und einer Kamera seit dem Start (jeder setzt den Filter zurueck) */
+  modeSwitches: number;
+  /** Alter des letzten Bildes von Kamera B in ms (Aufnahmezeit A minus B), null ohne B */
+  lagB: number | null;
   fused: number;
   rejected: number;
   fps: number;
@@ -68,6 +97,7 @@ export interface TrackFrame {
 /** Ergebnis eines neuen Bildes von Kamera B (nur fuer die Vorschau). */
 export interface TrackFrameB {
   img: NormalizedLandmark[] | null;
+  handsImg: NormalizedLandmark[][];
 }
 
 export class Tracker {
@@ -82,18 +112,32 @@ export class Tracker {
   private readonly missing = new Array<number>(POSE_COUNT).fill(0);
   private readonly handFilters = { Left: hand(), Right: hand() };
   private readonly handMissing = { Left: 0, Right: 0 };
-  private lastVideoTime = -1;
+  // Letzte Glaettung nach Kalman/EKF (One-Euro): Skelett, Haende, Position im Raum
+  private readonly smoothBody = new OneEuroGroup(POSE_COUNT);
+  private readonly smoothHands = { Left: new OneEuroGroup(HAND_COUNT), Right: new OneEuroGroup(HAND_COUNT) };
+  private readonly smoothRoot = new OneEuroPoint();
+  /** Verlorene Gelenke einfrieren statt in die Ruhehaltung springen lassen. */
+  private readonly hold = new PoseHold();
+  private readonly standing = new StandingHeight();
+  private face: FacePose | null = null;
+  private faceLost = 0;
   private lastStamp = 0;
   private fps = 0;
   private rootOrigin: Vec3 | null = null;
+  private readonly originSettle = new Settle();
   private lastMode: 'mono' | 'stereo' = 'mono';
+  private lastStereoAt = -Infinity;
+  private modeSwitches = 0;
+  private lastStampB: number | null = null;
+  private lastStampA: number | null = null;
   private collecting: { start: number; frames: CalibrationFrame[] } | null = null;
   private readonly camB = {
-    lastTime: -1,
     stamp: -Infinity,
     world: null as Landmark[] | null,
     img: null as NormalizedLandmark[] | null,
     rejected: 0,
+    /** Haende von Kamera B in Achsen des Avatars von Kamera A (nur mit Stereo-Kalibrierung) */
+    hands: { Left: null, Right: null } as Hands<Vec3[]>,
   };
 
   constructor(
@@ -114,23 +158,32 @@ export class Tracker {
 
   /** Neue Quelle fuer Kamera A: Filter und Bezugspunkt neu. */
   reset(): void {
-    this.lastVideoTime = -1;
+    this.detectors.A.reset();
     this.lastStamp = 0;
     this.rootOrigin = null;
+    this.originSettle.reset();
     this.rootFilter.reset();
     this.filters.forEach((f) => f.reset());
     SIDES.forEach((s) => this.handFilters[s].forEach((f) => f.reset()));
+    this.smoothBody.reset();
+    SIDES.forEach((s) => this.smoothHands[s].reset());
+    this.smoothRoot.reset();
+    this.hold.reset();
+    this.standing.reset();
+    this.face = null;
   }
 
   /** Neue Quelle fuer Kamera B. */
   resetB(): void {
-    this.camB.lastTime = -1;
+    this.detectors.B.reset();
     this.camB.stamp = -Infinity;
   }
 
   /** Aktuelle Position wird zum Bezugspunkt ("Position zuruecksetzen"). */
   recenter(): void {
     this.rootOrigin = null;
+    this.originSettle.reset();
+    this.standing.reset(); // aufrecht stehen und zuruecksetzen: neuer Bezug fuer die Hoehe
   }
 
   startCalibration(now: number): void {
@@ -144,41 +197,59 @@ export class Tracker {
 
   /** Kamera B: eigene Pose-Erkennung, Ergebnis wird mit Zeitstempel gemerkt. null = kein neues Bild. */
   stepB(now: number, settings: TrackSettings): TrackFrameB | null {
-    const video = this.videoB,
-      b = this.camB;
-    if (video.readyState < 2 || video.currentTime === b.lastTime) return null;
-    b.lastTime = video.currentTime;
-    const result = this.detectors.poseB.detectForVideo(video, now);
-    b.world = result.worldLandmarks?.[0] ?? null;
-    b.img = result.landmarks?.[0] ?? null;
-    b.stamp = now;
+    const b = this.camB;
+    const det = this.detectors.B;
+    // Neues Bild abgeben (falls die Erkennung frei ist), fertiges Ergebnis abholen.
+    det.submit(this.videoB, now, this.clockB.stamp(now), settings.fingers);
+    const d = det.take();
+    if (!d) return null;
+    b.world = d.world;
+    b.img = d.img;
+    b.stamp = d.t;
+    // Finger auch vom Handy: springen ein, wenn Kamera A eine Hand nicht sieht (z.B. verdeckt).
+    let handsImg: NormalizedLandmark[][] = [];
+    b.hands = { Left: null, Right: null };
+    if (settings.fingers && d.hands) {
+      const hands = d.hands;
+      handsImg = hands.landmarks as NormalizedLandmark[][];
+      if (this.stereo) {
+        const measured = assignHands(hands, b.img);
+        for (const side of SIDES) b.hands[side] = measured[side]?.map((p) => fromCamB(p, this.stereo!.R)) ?? null;
+      }
+    }
     // Kamera B korrigiert den Filter zu ihrem eigenen Aufnahmezeitpunkt.
-    if (this.stereo && this.lastMode === 'stereo') {
+    this.lastStampB = d.stamp;
+    const lag = this.lastStampA === null ? 0 : this.lastStampA - d.stamp;
+    if (this.stereo && this.lastMode === 'stereo' && lag < MAX_LAG_MS) {
       const obs = buildObs(b.world, b.img, this.cameras.model('B'), this.stereo.R);
-      this.ekf.updateCamera(this.clockB.stamp(now), obs, this.stereo.R, this.stereo.T, settings);
+      this.ekf.updateCamera(d.stamp, obs, this.stereo.R, this.stereo.T, settings);
       b.rejected = this.ekf.rejected;
     }
-    return { img: b.img };
+    return { img: b.img, handsImg };
   }
 
   /** Kamera A: das ganze Tracking fuer ein neues Bild. null = kein neues Bild. */
   stepA(now: number, settings: TrackSettings): TrackFrame | null {
-    const video = this.videoA;
-    if (video.readyState < 2 || video.currentTime === this.lastVideoTime) return null;
-    this.lastVideoTime = video.currentTime;
+    const det = this.detectors.A;
+    det.submit(this.videoA, now, this.clockA.stamp(now), settings.fingers, !!settings.face);
+    const d = det.take();
+    if (!d) return null;
+    // Ab hier zaehlt der Zeitpunkt, zu dem das Bild abgeholt wurde, nicht der Moment des Ergebnisses.
+    now = d.t;
 
-    const dt = this.lastStamp ? Math.min((now - this.lastStamp) / 1000, 0.1) : 1 / 30;
+    const dt = this.lastStamp ? Math.min(Math.max((now - this.lastStamp) / 1000, 1e-3), 0.1) : 1 / 30;
     if (this.lastStamp) this.fps += (1 / dt - this.fps) * 0.1;
     this.lastStamp = now;
 
-    const result = this.detectors.pose.detectForVideo(video, now);
-    const world: Landmark[] | null = result.worldLandmarks?.[0] ?? null;
-    const img: NormalizedLandmark[] | null = result.landmarks?.[0] ?? null;
+    const world: Landmark[] | null = d.world;
+    const img: NormalizedLandmark[] | null = d.img;
     const { sigmaA, sigmaZ } = settings;
-    const hands = this.trackHands(now, img, dt, settings);
-
     const b = this.camB;
-    const bFresh = now - b.stamp < STALE_MS;
+    this.lastStampA = d.stamp;
+    const lagB = this.lastStampB === null ? null : d.stamp - this.lastStampB;
+    const bFresh = Math.abs(now - b.stamp) < STALE_MS && (lagB === null || lagB < MAX_LAG_MS);
+    const hands = this.trackHands(d.hands, img, dt, settings, bFresh);
+
     const calibration = this.collecting ? this.collect(now, world, img, bFresh ? b.world : null, b.img) : null;
 
     const camA = this.cameras.model('A');
@@ -187,13 +258,19 @@ export class Tracker {
     if (this.stereo && world && img && bFresh && b.world && b.img) {
       m = measureStereo(world, img, b.world, b.img, this.stereo, camA, this.cameras.model('B'));
     }
-    const mode = m ? 'stereo' : 'mono';
+    if (m) this.lastStereoAt = now;
+    // Kurzer Ausfall von B: im Stereo-Modus bleiben, A korrigiert den EKF allein.
+    const hold = !m && !!this.stereo && this.lastMode === 'stereo' && !!world && !!img && now - this.lastStereoAt < STEREO_HOLD_MS;
+    const mode = m || hold ? 'stereo' : 'mono';
     if (!m) m = measureMono(world, img, camA);
     if (mode !== this.lastMode) {
+      this.modeSwitches++;
       // Die Positionen beider Verfahren sind nicht deckungsgleich: neu einmitten.
       this.lastMode = mode;
       this.rootOrigin = null;
+      this.originSettle.reset();
       this.rootFilter.reset();
+      this.standing.reset();
       this.ekf.reset();
     }
 
@@ -202,9 +279,11 @@ export class Tracker {
       fusedRoot: Vec3 | null = null,
       rejected = 0;
     if (mode === 'stereo') {
-      const abs = m.abs ?? [];
+      // Beim Halten liegt keine Triangulation vor (die Werte von measureMono liegen anders):
+      // neue Gelenke starten dann bei der Einzelschaetzung des EKF.
+      const abs = hold ? null : (m.abs ?? []);
       const obs: (JointObservation | null)[] = buildObs(world, img, camA, null);
-      this.ekf.updateCamera(this.clockA.stamp(now), obs, IDENTITY, [0, 0, 0], { sigmaA, sigmaZ, init: (i) => abs[i] });
+      this.ekf.updateCamera(d.stamp, obs, IDENTITY, [0, 0, 0], { sigmaA, sigmaZ, init: abs ? (i) => abs[i] : null });
       rejected = this.ekf.rejected + b.rejected;
       fused = this.ekf.positions();
       const l = fused[LM.lHip],
@@ -230,26 +309,51 @@ export class Tracker {
     }
 
     const rawRoot = m.root;
-    if (rawRoot && !this.rootOrigin) this.rootOrigin = [rawRoot[0], rawRoot[1], rawRoot[2]];
+    // Nullpunkt fuer die Bewegung im Raum erst, wenn die Messung ruhig ist (core/settle).
+    if (!this.rootOrigin) this.rootOrigin = this.originSettle.step(rawRoot);
     const root: Vec3 | null = fused
       ? fusedRoot
-        ? [fusedRoot[0], 0, -fusedRoot[2]]
+        ? [fusedRoot[0], -fusedRoot[1], -fusedRoot[2]]
         : null
       : this.rootFilter.step(rawRoot, dt, sigmaA / 4, sigmaZ * 3);
+
+    // Letzte Stufe: adaptive Glaettung. In Ruhe ruhig, bei schneller Bewegung ohne viel Verzoegerung.
+    const smooth = smoothingParams(settings.smoothing);
+    const smoothed = this.smoothBody.step(filtered, dt, smooth) ?? filtered;
+    const smoothedHands: Hands<Vec3[]> = { Left: null, Right: null };
+    for (const side of SIDES) {
+      const h = this.smoothHands[side].step(hands.filtered[side], dt, smooth);
+      smoothedHands[side] = h && h.every(Boolean) ? (h as Vec3[]) : hands.filtered[side];
+    }
+    // Was ein Koerper nicht kann: verlorene Teile einfrieren, Haende nicht in Rumpf und Kopf, Knie nicht
+    // nach vorne durchknicken. Zuerst die Hand am Handgelenk festhalten, dann die Grenzen.
+    const limits: LimitReport = { pushed: 0, knees: 0 };
+    const physical = limitBody(this.hold.step(smoothed, dt), limits);
+    for (const side of SIDES) {
+      const wrist = physical?.[side === 'Left' ? LM.lWr : LM.rWr] ?? null;
+      smoothedHands[side] = this.hold.stepHand(side, smoothedHands[side], wrist, dt);
+    }
+    const face = this.smoothFace(d.face ?? null, dt, settings.smoothing);
+    const smoothedRoot = root ? (smooth ? this.smoothRoot.step(root, dt, { ...smooth, minCutoff: smooth.minCutoff / 2 }) : root) : null;
 
     return {
       img,
       handsImg: hands.img,
       personSeen: !!world,
       raw,
-      filtered,
+      filtered: physical ?? smoothed,
+      limits,
       rawHands: hands.raw,
-      filteredHands: hands.filtered,
+      filteredHands: smoothedHands,
       rawRoot,
-      root: root ? [root[0], root[1], root[2]] : null,
+      root: smoothedRoot ? [smoothedRoot[0], smoothedRoot[1], smoothedRoot[2]] : null,
       origin: this.rootOrigin,
+      face,
+      height: this.standing.step(smoothedRoot ? smoothedRoot[1] : null, dt),
       mode,
       nTri: m.nTri,
+      modeSwitches: this.modeSwitches,
+      lagB,
       fused: fused ? fused.filter(Boolean).length : 0,
       rejected,
       fps: this.fps,
@@ -257,10 +361,29 @@ export class Tracker {
     };
   }
 
-  private trackHands(now: number, img: NormalizedLandmark[] | null, dt: number, settings: TrackSettings) {
+  /**
+   * Kopf und Mund glaetten: je staerker die Glaettung, desto langsamer folgt der Kopf. Verliert das
+   * Gesichtsmodell das Gesicht kurz (Blinzeln, Hand davor), bleibt der letzte Stand FACE_HOLD_S stehen,
+   * danach null (der Kopf folgt wieder Nase und Ohren).
+   */
+  private smoothFace(m: FacePose | null, dt: number, smoothing: number): FacePose | null {
+    if (!m) {
+      this.faceLost += dt;
+      if (this.faceLost > FACE_HOLD_S) this.face = null;
+      return this.face;
+    }
+    this.faceLost = 0;
+    // Anteil des neuen Werts pro Bild, umgerechnet auf die Bildrate (bei 30 Bilder/s: 1 bis 0.25).
+    const k = 1 - Math.pow(1 - Math.max(0.25, 1 - 0.75 * smoothing), dt * 30);
+    this.face = this.face ? mixFace(this.face, m, k) : m;
+    return this.face;
+  }
+
+  private trackHands(result: HandDetection | null, img: NormalizedLandmark[] | null, dt: number, settings: TrackSettings, bFresh: boolean) {
     const active = settings.fingers;
-    const result = active ? this.detectors.hands.detectForVideo(this.videoA, now) : null;
     const measured = assignHands(result, img);
+    // Sieht Kamera A eine Hand nicht, aber das Handy: dessen Finger nehmen.
+    if (bFresh) for (const side of SIDES) measured[side] ??= this.camB.hands[side];
     const raw: Hands<Vec3[]> = { Left: null, Right: null };
     const filtered: Hands<Vec3[]> = { Left: null, Right: null };
     for (const side of SIDES) {
@@ -275,7 +398,7 @@ export class Tracker {
       const pts = this.handFilters[side].map((f, i) => f.step(z?.[i] ?? null, dt, settings.sigmaA, settings.sigmaZ * 0.3));
       filtered[side] = pts.every((p) => p) ? pts.map((p) => [p![0], p![1], p![2]] as Vec3) : null;
     }
-    return { raw, filtered, img: result?.landmarks ?? [] };
+    return { raw, filtered, img: (result?.landmarks ?? []) as NormalizedLandmark[][] };
   }
 
   /** Sammelt waehrend der Kalibrierung Gelenke, die beide Kameras sicher sehen. */
@@ -313,4 +436,13 @@ export class Tracker {
 
 function hand(): KalmanPoint[] {
   return Array.from({ length: HAND_COUNT }, () => new KalmanPoint());
+}
+
+/**
+ * Punkt in Achsen des Avatars, gemessen von Kamera B -> Achsen des Avatars von Kamera A.
+ * Avatar-Achsen = Kameraachsen mit gespiegeltem y und z (D = diag(1, -1, -1)), also D R^T D.
+ */
+function fromCamB(p: Vec3, R: Mat3): Vec3 {
+  const q = mulMtV(R, [p[0], -p[1], -p[2]]);
+  return [q[0], -q[1], -q[2]];
 }

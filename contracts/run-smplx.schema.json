@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-smplx.schema.json",
+  "title": "RunSmplx",
+  "description": "data/runs/<lauf>/smplx.json: SMPL-X-Skelett eines Avatars von LHM++, in Weltkoordinaten (siehe run-splat, Füsse bei y = 0). Die Gewichte stehen daneben in smplx_skin.bin: count x 4 Gelenk-Indizes (uint8), danach count x 4 Gewichte (uint8, 0 bis 255, Summe etwa 255), in der Reihenfolge der Kleckse in splat.ply. Schreiben: scripts/pod-do/lhm_zum_viewer.py. Lesen: Splat-Avatar.",
+  "type": "object",
+  "required": ["joints", "parents", "count"],
+  "properties": {
+    "joints": {
+      "description": "Die 55 Gelenke von SMPL-X in der Haltung von splat.ply (Becken, Hüften, Wirbelsäule, Knie, ..., Hände).",
+      "type": "array",
+      "minItems": 55,
+      "maxItems": 55,
+      "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+    },
+    "parents": {
+      "description": "Elterngelenk jedes Gelenks, -1 für das Becken.",
+      "type": "array",
+      "minItems": 55,
+      "maxItems": 55,
+      "items": { "type": "integer", "minimum": -1, "maximum": 54 }
+    },
+    "count": { "type": "integer", "minimum": 1, "description": "Anzahl Kleckse in splat.ply und smplx_skin.bin." }
+  }
+}

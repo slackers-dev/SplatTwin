@@ -9,8 +9,10 @@
     "upper",
     "mirror",
     "pos",
+    "height",
     "pts",
-    "hands"
+    "hands",
+    "face"
   ],
   "properties": {
     "t": {
@@ -32,6 +34,13 @@
       },
       "minItems": 2,
       "maxItems": 2
+    },
+    "height": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "Höhe der Hüfte relativ zum aufrechten Stehen in Metern (in die Knie: negativ, Sprung: positiv), null wenn unbekannt oder ausgeschaltet. Der Avatar steht auf dieser Höhe, die Beine knicken ein."
     },
     "pts": {
       "type": "array",
@@ -57,6 +66,38 @@
           "$ref": "#/$defs/hand"
         }
       }
+    },
+    "face": {
+      "description": "Kopf und Mund aus dem Gesichtsmodell: Drehung des Kopfes als Quaternion [x, y, z, w] in den Achsen des Avatars (Blick in die Kamera = keine Drehung) und jaw = Mund offen 0..1. null ohne Gesicht (z. B. von hinten): Der Kopf folgt dann Nase und Ohren.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "q",
+            "jaw"
+          ],
+          "properties": {
+            "q": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 4,
+              "tsType": "[number, number, number, number]"
+            },
+            "jaw": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "$defs": {

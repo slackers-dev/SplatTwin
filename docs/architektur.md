@@ -82,10 +82,10 @@ OpenCV-Arbeit (Kalibrierung) und ffmpeg laufen in einem Thread-Pool, damit der L
 
 | Ordner | Aufgabe | Darf benutzen |
 |---|---|---|
-| `core/` | reine Mathematik: Kalman, EKF, Stereo, Messung, Hände, Drehwinkel, Überblendung von Live-Bildern | nur `contracts` |
+| `core/` | reine Mathematik: Kalman, EKF, Stereo, Rektifizierung und Genauigkeit, Messung, Hände, Drehwinkel, Überblendung von Live-Bildern | nur `contracts` |
 | `contracts/` | aus `contracts/*.schema.json` erzeugte Typen | – |
 | `tracking/` | Kameras, MediaPipe, Tracker, Kalibrierung, Brücke zur App | `core`, `contracts`, `ui` |
-| `avatar/` | three.js: Szene, Roboter, Retargeting, Splat-Skinning (mit `skin.bin`), Raum der Bühne, Presenter | `core`, `contracts`, `live` (Typen) |
+| `avatar/` | three.js: Szene, Roboter, Retargeting, Splat-Skinning (Roboter-Skelett mit `skin.bin`, oder SMPL-X bei Avataren von LHM++), Raum der Bühne, Presenter | `core`, `contracts`, `live` (Typen) |
 | `capture/` | geführte Aufnahme: Pose prüfen, Ablauf, Rekorder, Ansage | `core`, `contracts`, `ui` |
 | `live/` | Binärformat der Live-Bilder, senden und empfangen über WebSockets | `core`, `contracts` |
 | `slides/` | Folien-PDF laden und Seiten zeichnen (pdf.js) | – |
@@ -97,10 +97,32 @@ ein eigenes TypeScript-Projekt ohne DOM: ein Zugriff auf `window` oder ein Video
 schon beim Kompilieren. `tracking` und `avatar` kennen sich nicht; Punkte gehen als `Vec3` (Arrays)
 von `tracking` zur Seite und werden dort mit `avatar/points.ts` zu three.js-Vektoren.
 
+**Splat-Avatar.** `avatar/splat-avatar.ts` hängt einen Splat an das getrackte Skelett. Hat der Lauf eine
+`smplx.json` (Avatar von LHM++), übernimmt `avatar/smplx-avatar.ts`: Es baut das SMPL-X-Skelett mit den
+Namen des Mixamo-Skeletts und verformt jeden Klecks mit den Gewichten von LHM++ (`smplx_skin.bin`). Das
+Skelett hängt als Mitläufer am Retargeter des Roboters (`Retargeter.followers`) und bekommt dieselben
+Punkte; Seiten und Bühne rufen weiter nur den Roboter auf. Ohne `smplx.json` gilt der alte Weg: Kleckse
+auf die Glieder des Roboters legen und dessen Gewichte übernehmen.
+
+**Höhe.** `core/measure.ts` misst die Höhe der Hüfte aus dem Kamerabild (auch ohne Hüfte im Bild),
+`core/height.ts` macht daraus die Höhe relativ zum Stehen (`TrackFrame.height`, im Live-Bild `height`).
+`Retargeter.apply(P, hands, { height })` stellt die Figur auf diese Höhe und knickt die Beine mit
+Zwei-Knochen-IK, damit die Füsse auf dem Boden bleiben. Ohne Höhe gilt: tiefster Fuss auf dem Boden.
+Nullpunkt im Raum und Höhenbezug entstehen erst, wenn die Messung ruhig ist (`core/settle.ts`).
+Entscheidung 0011.
+
 **Tracker.** `tracking/tracker.ts` enthält den Ablauf pro Bild ohne Bedienelemente: Die Seite ruft pro
 Animationsbild `stepB()` und `stepA()` mit den aktuellen Einstellungen auf und bekommt Messung, gefilterte
 Gelenke, Position und Kennzahlen zurück. Was damit geschieht (Avatar, Vorschau, Live senden, Status),
 entscheidet die Seite.
+
+**Erkennung.** `tracking/detection.ts` (`CameraDetector`) rechnet MediaPipe je Kamera: Kamera A im
+Hauptstrang (liest das Videobild ohne Kopie), Kamera B in einem Hintergrund-Strang
+(`tracking/detect-worker.ts`, klassischer Worker, weil MediaPipe `importScripts` braucht). So rechnen
+beide gleichzeitig. Beide im Hintergrund war langsamer, weil sie sich um die GPU streiten. Startet der
+Worker nicht, rechnet die Kamera im Hauptstrang. Umstellen zum Vergleichen: `?detA=` / `?detB=`
+`inline | worker | cpu`, Modell je Kamera mit `?poseA=` / `?poseB=` `lite | full | heavy` (B: heavy).
+Nach Kalman bzw. EKF glättet ein One-Euro-Filter (`core/one-euro.ts`) adaptiv.
 
 ## Python (`python/src/splattwin`)
 

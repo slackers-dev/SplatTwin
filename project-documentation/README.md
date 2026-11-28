@@ -24,6 +24,9 @@ Wie der Code funktioniert, steht in [`../docs/`](../docs/).
 | [0005](entscheidungen/0005-sprache-im-code.md) | Bezeichner Englisch, Kommentare und Doku Deutsch | angenommen | 25.11.2026 |
 | [0006](entscheidungen/0006-umbau-auf-einem-branch.md) | Umbau auf einem Branch, ohne `legacy/` | angenommen | 25.11.2026 |
 | [0007](entscheidungen/0007-avatar-weg.md) | Avatar-Weg: SMPL-X mit ExAvatar | offen | 20.11.2026 |
+| [0008](entscheidungen/0008-gpu-runner-pod-do.md) | GPU-Aufgaben mit pod-do auf RunPod | angenommen | 26.11.2026 |
+| [0009](entscheidungen/0009-genai-verfeinerung.md) | Avatar offline mit generativer KI verfeinern | offen | 26.11.2026 |
+| [0010](entscheidungen/0010-rektifizierung-als-messwerkzeug.md) | Rektifizierung als Messwerkzeug, kein dichtes Stereo | angenommen | 27.11.2026 |
 
 ## Eine Entscheidung festhalten
 

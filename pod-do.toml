@@ -1,0 +1,88 @@
+# Rechnen auf einer gemieteten GPU bei RunPod, mit pod-do (https://github.com/slackers-dev/pod-do).
+# Einrichten und Befehle: scripts/pod-do/README.md
+project = "splattwin"
+
+# LHM++: Avatar als Gaussian Splat auf SMPL-X aus wenigen Fotos. Braucht etwa 8 GB VRAM.
+[env.lhm]
+image = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04"
+# Fertige Umgebung als privates Image (pod-do image lhm). Ohne Registry-Zugang: Archiv auf dem Volume.
+docker = "ghcr.io/slackers-dev/splattwin-lhm"
+min_vram = 8
+# torch 2.3 kennt Blackwell (RTX 50xx, PRO 6000) noch nicht: nur Ampere, Ada, Hopper
+gpus = ["NVIDIA RTX 2000 Ada Generation", "NVIDIA RTX A4500", "NVIDIA RTX A4000", "NVIDIA RTX 4000 Ada Generation",
+        "NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA A40", "NVIDIA GeForce RTX 4090"]
+cuda = "12.1"
+disk = 80
+boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git libgl1 libglib2.0-0 ffmpeg >/dev/null"
+setup_file = "scripts/pod-do/setup-lhm.sh"
+vars = { PYTHONUNBUFFERED = "1" }
+
+[task.lhm]
+env = "lhm"
+args = ["fotos", "name?"]
+defaults = { name = "{fotos.name}" }
+before = "bash scripts/pod-do/fotos-vorbereiten.sh"
+upload = { "images" = "data/lhm/{name}/fotos", "lhm_export.py" = "scripts/pod-do/lhm_export.py" }
+run = '''
+n=$(ls images | wc -l)
+views=$(( n > 16 ? 16 : n ))
+mkdir -p out
+cd "$POD_DO_ENV/LHM-plusplus" && source .venv/bin/activate
+# wie to_gs_ply.py, schreibt zusaetzlich out/skin.npz (SMPL-X-Gewichte)
+python "$JOB/lhm_export.py" \
+  --model_name LHMPP-700M-PixelShuffle --model_path ./pretrained_models/LHMPP-700M-PixelShuffle \
+  --images_dir "$JOB/images" --ref_view "$views" --output "$JOB/out/avatar.ply"
+'''
+download = { "out" = "data/lhm/{name}" }
+after = "uv run python scripts/pod-do/lhm_zum_viewer.py \"$NAME\""   # -> viewer.html?run=lhm-<name>
+
+# ExAvatar: Avatar mit Haenden und Mimik, aus einem Video trainiert (etwa 2 bis 3 h). Training braucht
+# laut den Issues 17 bis 20 GB VRAM, darum nur Karten ab 24 GB. torch 2.1: kein Blackwell.
+[env.exavatar]
+image = "runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04"
+min_vram = 24
+gpus = ["NVIDIA RTX A5000", "NVIDIA L4", "NVIDIA GeForce RTX 4090", "NVIDIA RTX A6000", "NVIDIA A40",
+        "NVIDIA L40S", "NVIDIA GeForce RTX 3090"]
+cuda = "12.1"
+disk = 100
+max_hours = 10  # Training allein rund 6.5 h auf einer L4
+boot = "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git unzip libgl1 libglu1-mesa libegl1 libgles2 libglib2.0-0 ffmpeg >/dev/null"
+setup_file = "scripts/pod-do/setup-exavatar.sh"
+vars = { PYTHONUNBUFFERED = "1", PYOPENGL_PLATFORM = "egl", CUDA_VISIBLE_DEVICES = "0" }
+
+# Avatar aus data/exavatar/<name>/ (video.mp4 und frame_list_{all,train,test}.txt, siehe scripts/pod-do/README.md).
+# Die Koerpermodelle (lizenziert) liegen als ZIPs in data/models/mpi/ und gehen bei jedem Lauf mit.
+[task.exavatar]
+env = "exavatar"
+args = ["name"]
+upload = { "subject" = "data/exavatar/{name}", "mpi" = "data/models/mpi", "exavatar_modelle.sh" = "scripts/pod-do/exavatar_modelle.sh", "exavatar_export.py" = "scripts/pod-do/exavatar_export.py" }
+run = '''
+source "$POD_DO_ENV/.venv/bin/activate"
+bash "$JOB/exavatar_modelle.sh" "$JOB/mpi"
+X="$POD_DO_ENV/ExAvatar"
+D="$X/fitting/data/Custom/data/$NAME"
+mkdir -p "$(dirname "$D")" "$X/avatar/data/Custom/data" "$JOB/out"
+rm -rf "$D" && ln -s "$JOB/subject" "$D"
+ln -sfn "$D" "$X/avatar/data/Custom/data/$NAME"
+cd "$X/fitting/tools"
+echo "==> Bilder aus dem Video"
+python extract_frames.py --root_path "$D"
+echo "==> SMPL-X anpassen (DECA, Hand4Whole, mmpose, Fit, Glaetten)"
+python run.py --root_path "$D"
+# run.py beendet sich bei Fehlern mit Code 0: Ergebnis pruefen
+[ -f "$D/smplx_optimized/shape_param.json" ] || { echo "FEHLER: Fitting ohne Ergebnis"; exit 1; }
+echo "==> Masken (SAM)"
+(cd segment-anything && python run_sam.py --root_path "$D")
+echo "==> Hintergrund-Punktwolke (Depth-Anything)"
+(cd Depth-Anything-V2 && python run_depth_anything.py --root_path "$D")
+echo "==> Avatar trainieren"
+cd "$X/avatar/main"
+python train.py --subject_id "$NAME"
+python get_neutral_pose.py --subject_id "$NAME" --test_epoch 4
+python "$JOB/exavatar_export.py" --subject_id "$NAME" --test_epoch 4 --output "$JOB/out"
+cp neutral_pose/0.png neutral_pose/12.png neutral_pose/25.png neutral_pose/37.png "$JOB/out/" 2>/dev/null || true
+mkdir -p "$JOB/out/fit" && cp -r "$D/smplx_optimized" "$JOB/out/fit/"
+cp "$X/avatar/output/model_dump/$NAME/snapshot_4.pth" "$JOB/out/"
+'''
+download = { "out" = "data/exavatar/{name}/avatar" }
+after = "uv run python scripts/pod-do/lhm_zum_viewer.py \"$NAME\" exavatar"

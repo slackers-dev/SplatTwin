@@ -126,6 +126,10 @@ export interface LiveFrame {
    */
   pos: [number, number];
   /**
+   * Höhe der Hüfte relativ zum aufrechten Stehen in Metern (in die Knie: negativ, Sprung: positiv), null wenn unbekannt oder ausgeschaltet. Der Avatar steht auf dieser Höhe, die Beine knicken ein.
+   */
+  height: number | null;
+  /**
    * 33 Gelenke von MediaPipe Pose, null = unbekannt. Übertragen werden nur die 17, die der Avatar braucht.
    *
    * @minItems 33
@@ -135,6 +139,17 @@ export interface LiveFrame {
   hands: {
     Left: Hand;
     Right: Hand;
+  };
+  /**
+   * Kopf und Mund aus dem Gesichtsmodell: Drehung des Kopfes als Quaternion [x, y, z, w] in den Achsen des Avatars (Blick in die Kamera = keine Drehung) und jaw = Mund offen 0..1. null ohne Gesicht (z. B. von hinten): Der Kopf folgt dann Nase und Ohren.
+   */
+  face: null | {
+    /**
+     * @minItems 4
+     * @maxItems 4
+     */
+    q: [number, number, number, number];
+    jaw: number;
   };
 }
 
@@ -157,6 +172,142 @@ export interface RunRig {
   source: {
     [k: string]: "trianguliert" | "ein Bild";
   };
+}
+
+/**
+ * data/runs/<lauf>/smplx.json: SMPL-X-Skelett eines Avatars von LHM++, in Weltkoordinaten (siehe run-splat, Füsse bei y = 0). Die Gewichte stehen daneben in smplx_skin.bin: count x 4 Gelenk-Indizes (uint8), danach count x 4 Gewichte (uint8, 0 bis 255, Summe etwa 255), in der Reihenfolge der Kleckse in splat.ply. Schreiben: scripts/pod-do/lhm_zum_viewer.py. Lesen: Splat-Avatar.
+ */
+export interface RunSmplx {
+  /**
+   * Die 55 Gelenke von SMPL-X in der Haltung von splat.ply (Becken, Hüften, Wirbelsäule, Knie, ..., Hände).
+   *
+   * @minItems 55
+   * @maxItems 55
+   */
+  joints: [
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number],
+    [number, number, number]
+  ];
+  /**
+   * Elterngelenk jedes Gelenks, -1 für das Becken.
+   *
+   * @minItems 55
+   * @maxItems 55
+   */
+  parents: [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number
+  ];
+  /**
+   * Anzahl Kleckse in splat.ply und smplx_skin.bin.
+   */
+  count: number;
 }
 
 /**

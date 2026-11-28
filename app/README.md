@@ -57,6 +57,13 @@ eigenen Präfix eintragen. Nach dem Hinzufügen oder Löschen von Quelldateien `
 
 Ohne Handy lässt sich alles mit «Hinzufügen › Videodatei als Kamera» oder «Testbild» ausprobieren.
 
+**Per USB-Kabel statt WLAN:** iPhone mit dem Kabel an den Mac hängen (einmal «Vertrauen» bestätigen),
+die App auf dem iPhone offen lassen. Der Mac findet das Handy über den USB-Dienst von macOS (usbmuxd) und
+wechselt von selbst auf das Kabel. Die Kachel zeigt dann «· Kabel». Kabel abziehen: zurück ins WLAN.
+Die Verbindung ist gleich verschlüsselt und steuert die Kamera gleich wie im WLAN, nur ohne Router dazwischen.
+Auf dem Handy wartet die App dafür auf den Anschlüssen 48931 (Verbindung) und 48930 (Name), nur lokal
+erreichbar (`USBLink.swift`).
+
 ## Aufbau
 
 ```

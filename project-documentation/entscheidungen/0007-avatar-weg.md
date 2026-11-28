@@ -33,9 +33,14 @@ Gesicht. Training auf einer gemieteten GPU (RunPod, 24 GB oder mehr).
 
 ## Was für den Entscheid noch fehlt
 
-- [ ] Machbarkeitstest mit dem Beispielvideo von ExAvatar auf dem Pod
-- [ ] Eigene Aufnahme nach dem Drehbuch, Vergleich mit Brush
-- [ ] Entscheiden, ob zuerst LHM getestet wird
+- [ ] Machbarkeitstest auf dem Pod: Umgebung eingerichtet und geprüft (27.11.2026), Aufgabe
+  `pod-do run exavatar <name>` bereit. Es fehlen noch die Körpermodelle (eigene Konten bei den MPI-Seiten).
+- [ ] Eigene Aufnahme nach dem Drehbuch, Vergleich mit Brush. Video vom 27.11.2026 liegt in
+  `data/exavatar/beni/`, daraus auch ein LHM-Avatar (`lhm-beni`).
+- [x] Entscheiden, ob zuerst LHM getestet wird: ja, am 26.11.2026. LHM++ läuft über pod-do
+  (Entscheidung 0008), der Avatar wird im Browser über sein SMPL-X-Skelett bewegt
+  (`web/src/avatar/smplx-avatar.ts`). Deutlich besser als über das Roboter-Skelett. Live-Tracking liefert
+  dafür weiter nur MediaPipe-Punkte, daraus werden die Gelenke gedreht. Hände und Gesicht noch starr.
 
 ## Quellen
 

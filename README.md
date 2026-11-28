@@ -15,7 +15,7 @@ oder Mac-App        Video → Masken → COLMAP → Brush       Kamera → Pose 
 | [`python/`](python/) | Paket `splattwin`: Pipeline (Video → Splat) und lokaler Server |
 | [`contracts/`](contracts/) | Datenformate zwischen den Teilen als JSON-Schema |
 | [`app/`](app/) | Mac- und iPhone-App für Aufnahme und Kameras, siehe [`app/README.md`](app/README.md) |
-| [`docs/`](docs/) | [Architektur](docs/architektur.md), [Konventionen](docs/konventionen.md), [Anforderungen an die App](docs/app-anforderungen.md), [Notizen zum SMPL-Avatar](docs/notizen-smpl-avatar.md) |
+| [`docs/`](docs/) | [Architektur](docs/architektur.md), [Konventionen](docs/konventionen.md), [Anforderungen an die App](docs/app-anforderungen.md), [Notizen zum SMPL-Avatar](docs/notizen-smpl-avatar.md), [Notizen zum Zwei-Kamera-Tracking](docs/notizen-stereo-tracking.md) |
 | [`project-documentation/`](project-documentation/) | Verlauf und Entscheidungen des Projekts |
 | `data/` | Aufnahmen, Läufe und Tools, **nicht im Repo** |
 
@@ -71,6 +71,16 @@ uv run splattwin rig video
 Ergebnis in `data/runs/video/`, ansehen mit `viewer.html?run=video`, als Avatar `tracking.html?run=video`.
 Eine Aufnahme aus `capture.html` oder der App rechnet `uv run splattwin process <name>` in einem Schritt
 (Splat, Kopf, Gelenke). Hinweise für gute Aufnahmen: [`docs/notizen-smpl-avatar.md`](docs/notizen-smpl-avatar.md).
+
+### Avatar aus Fotos mit LHM++ (Versuch, RunPod)
+
+```sh
+make lhm FOTOS=<ordner mit fotos>
+```
+
+Rechnet auf einem gemieteten GPU-Pod einen Avatar auf SMPL-X, Ergebnis in `data/lhm/<name>/avatar.ply`.
+Den Pod bedient [pod-do](https://github.com/slackers-dev/pod-do), die Aufgaben stehen in `pod-do.toml`.
+Auf RunPod getestet, etwa 5 Minuten und 6 Rappen pro Avatar. Einrichten und Hinweise: [`scripts/pod-do/README.md`](scripts/pod-do/README.md).
 
 ### Live-Präsentation (Bühne)
 
